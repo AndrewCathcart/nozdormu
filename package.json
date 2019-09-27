@@ -1,0 +1,28 @@
+{
+  "name": "nozdormu",
+  "version": "1.0.0",
+  "description": "A Discord bot to log peoples reactions to scheduled events to Google Sheets.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "nodemon index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AndrewCathcart/nozdormu.git"
+  },
+  "author": "Andrew Cathcart",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/AndrewCathcart/nozdormu/issues"
+  },
+  "homepage": "https://github.com/AndrewCathcart/nozdormu#readme",
+  "dependencies": {
+    "discord.js": "^11.5.1",
+    "eslint": "^6.4.0",
+    "eslint-config-airbnb": "^18.0.1",
+    "eslint-config-prettier": "^6.3.0",
+    "eslint-plugin-prettier": "^3.1.1",
+    "nodemon": "^1.19.2"
+  }
+}
