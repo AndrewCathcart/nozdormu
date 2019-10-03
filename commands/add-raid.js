@@ -23,6 +23,7 @@ module.exports = {
     }
 
     message.channel.send(`Scheduled raid on ${args[0]}.`);
+    // TODO: Add code here to add a date column to the sheet
 
     const embed = new Discord.RichEmbed()
       .setColor('#0099ff')
