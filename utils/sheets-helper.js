@@ -17,6 +17,7 @@ const TOKEN_PATH = 'token.json';
  * given callback function.
  * @param {Object} credentials The authorization client credentials.
  * @param {function} callback The callback to call with the authorized client.
+ * @param {Object} args Optional
  */
 function authorize(credentials, callback, args) {
   const {
@@ -24,6 +25,7 @@ function authorize(credentials, callback, args) {
     client_id,
     redirect_uris
   } = credentials.installed;
+
   const oAuth2Client = new google.auth.OAuth2(
     client_id,
     client_secret,
@@ -111,5 +113,7 @@ function positiveResponse(auth, args) {
     }
   );
 }
+
+function negativeResponse(auth, args) {}
 
 module.exports = { positiveResponse, authorize };

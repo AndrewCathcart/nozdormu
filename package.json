@@ -2,10 +2,10 @@
   "name": "nozdormu",
   "version": "1.0.0",
   "description": "A Discord bot to log peoples reactions to scheduled events to Google Sheets.",
-  "main": "index.js",
+  "main": "src/index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "nodemon index.js"
+    "start": "nodemon src/index.js"
   },
   "repository": {
     "type": "git",

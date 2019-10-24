@@ -16,6 +16,7 @@ module.exports = {
       );
     }
 
+    // Handle setting an event in the past
     if (date.setHours(0, 0, 0, 0) < new Date().setHours(0, 0, 0, 0)) {
       return message.reply(
         `You can't schedule an event in the past!`
@@ -44,8 +45,8 @@ module.exports = {
       embed.setDescription(args.slice(1, args.length).join(' '));
     }
 
-    let sentMessage;
     // Bot reacting to the newly posted embed in the correct order
+    let sentMessage;
     message.channel
       .send(embed)
       .then(message => {
