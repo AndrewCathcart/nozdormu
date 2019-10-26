@@ -107,21 +107,13 @@ client.on('raw', async event => {
 
 client.on('messageReactionAdd', (reaction, user) => {
   const username = user.username;
-  const date = reaction.message.embeds[0].title.replace(
-    /[^0-9\-]+/,
-    ''
-  );
-
-  // console.log(title);
-  console.log(`${username} reacted with ${reaction.emoji.name}`);
+  const date = reaction.message.embeds[0].title
+    .replace(/[^0-9\-]+/, '')
+    .replace('.', '');
 
   fs.readFile('credentials.json', (err, content) => {
     if (err) {
       return console.log('Error loading client secret file:', err);
-    }
-
-    if (reaction.emoji.name === '❌') {
-      // do negative response function call
     }
 
     if (reaction.emoji.name === '✅') {
@@ -129,6 +121,10 @@ client.on('messageReactionAdd', (reaction, user) => {
         username,
         date
       });
+    }
+
+    if (reaction.emoji.name === '❌') {
+      // do negative response function call
     }
   });
 });
