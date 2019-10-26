@@ -3,14 +3,13 @@ const { google } = require('googleapis');
 const fs = require('fs');
 
 // If modifying these scopes, delete token.json.
-const SCOPES = [
-  'https://www.googleapis.com/auth/spreadsheets.readonly'
-];
+const SCOPES = ['https://www.googleapis.com/auth/spreadsheets'];
 
 // The file token.json stores the user's access and refresh tokens, and is
 // created automatically when the authorization flow completes for the first
 // time.
 const TOKEN_PATH = 'token.json';
+const spreadsheetId = '1kTlvBbBJjmjLva9257DHPy7Fm41Uc8ZXk_oSitokYsc';
 
 /**
  * Create an OAuth2 client with the given credentials, and then execute the
@@ -77,36 +76,30 @@ function getNewToken(oAuth2Client, callback) {
 }
 
 function positiveResponse(auth, args) {
-  console.log(args);
+  const name = args.username;
+  const date = args.date;
 
   const sheets = google.sheets({ version: 'v4', auth });
+
   sheets.spreadsheets.values.get(
     {
-      spreadsheetId: '1kTlvBbBJjmjLva9257DHPy7Fm41Uc8ZXk_oSitokYsc',
+      spreadsheetId,
       range: 'RaidScheduleReactions!A:Z'
     },
     (err, res) => {
       if (err) {
         return console.log('The API returned an error: ' + err);
       }
+
       const rows = res.data.values;
       if (rows.length) {
-        dateRow = rows[0];
-        nameCol = rows.map(row => {
-          return row[0];
+        dates = rows[0]; // dates are on the first row
+        names = rows.map(row => {
+          return row[0]; // names are in the first column
         });
 
-        console.log(dateRow);
-        console.log(nameCol);
-
-        let nameRow;
-        if (nameCol.includes(args.username)) {
-          nameRow = nameCol.indexOf(args.username) + 1;
-        } else {
-          nameRow = nameCol.length + 1;
-          // insert name into this row
-        }
-        console.log('name on row', nameRow);
+        const rowNumOfName = getRowNumOfName(names, name, sheets);
+        let colNumOfDate;
       } else {
         console.log('No data found.');
       }
@@ -115,5 +108,40 @@ function positiveResponse(auth, args) {
 }
 
 function negativeResponse(auth, args) {}
+
+// Returns the row number containing the reacting users name
+function getRowNumOfName(names, name, sheets) {
+  let rowNumOfName;
+  if (names.includes(name)) {
+    rowNumOfName = names.indexOf(name) + 1;
+  } else {
+    // If the name doesn't exist in the spreadsheet then add it to the last row
+    rowNumOfName = names.length + 1;
+    addNameToSheet(sheets, rowNumOfName, name);
+  }
+
+  return rowNumOfName;
+}
+
+/* Performs an update to the spreadsheet, inserting the name of the person reacting into the last row
+There could potentially be an issue with overwriting a name written by another event that happens in a 
+very close time frame */
+function addNameToSheet(sheets, nameRow, name) {
+  sheets.spreadsheets.values.update(
+    {
+      spreadsheetId,
+      range: `RaidScheduleReactions!A${nameRow}`,
+      valueInputOption: 'RAW',
+      resource: { values: [[name]] }
+    },
+    (err, res) => {
+      if (err) {
+        console.log(err);
+      } else {
+        console.log(`Added ${name} to the sheet.`);
+      }
+    }
+  );
+}
 
 module.exports = { positiveResponse, authorize };
