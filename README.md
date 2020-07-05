@@ -1,6 +1,6 @@
 # nozdormu
 
-Currently a work in progress.
+No longer working on this as the community didn't need it in the end.
 
 [Discord](https://discordapp.com/) is a free voice, text & video chat app for gaming communities.
 
