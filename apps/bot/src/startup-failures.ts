@@ -2,6 +2,10 @@ import { DiscordAPIError } from "discord.js";
 
 // Turns Discord's rejection of a well-formed but wrong setting into a message naming that setting.
 export function explainDiscordRejection(error: unknown): string | undefined {
+  // discord.js reports a revoked token at login with its own error, not Discord's 401.
+  if (errorCode(error) === "TokenInvalid") {
+    return "Discord rejected DISCORD_TOKEN.";
+  }
   if (!(error instanceof DiscordAPIError)) {
     return undefined;
   }
@@ -17,7 +21,16 @@ export function explainDiscordRejection(error: unknown): string | undefined {
   return undefined;
 }
 
-const unreachableCodes = new Set(["ECONNREFUSED", "ENOTFOUND", "ETIMEDOUT", "EHOSTUNREACH"]);
+// Node's network errors, plus CONNECT_TIMEOUT from postgres.js's own 30-second connect timeout.
+const unreachableCodes = new Set([
+  "CONNECT_TIMEOUT",
+  "ECONNREFUSED",
+  "ENOTFOUND",
+  "EAI_AGAIN",
+  "ETIMEDOUT",
+  "EHOSTUNREACH",
+  "ENETUNREACH",
+]);
 
 function errorCode(error: unknown): string | undefined {
   return error instanceof Error && "code" in error && typeof error.code === "string"

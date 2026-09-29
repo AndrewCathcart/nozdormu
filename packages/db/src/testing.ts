@@ -6,6 +6,7 @@
 import { randomUUID } from "node:crypto";
 import postgres from "postgres";
 import { afterAll, beforeAll, inject } from "vitest";
+import { z } from "zod";
 import {
   connectDatabase,
   type Database,
@@ -16,6 +17,7 @@ import {
 const serverUrl = "postgres://postgres@localhost:5433";
 const testDatabaseName = /^nozdormu_test_(\d{13})_[0-9a-f]{32}$/;
 const staleAfterMs = 60 * 60 * 1000;
+const databaseNames = z.array(z.object({ datname: z.string() }));
 
 function newTestDatabaseName(): string {
   return `nozdormu_test_${String(Date.now())}_${randomUUID().replaceAll("-", "")}`;
@@ -53,11 +55,10 @@ export async function dropDatabase(name: string): Promise<void> {
 
 // Drops test databases left behind by runs that were killed before they could clean up.
 export async function dropStaleTestDatabases(now: Date): Promise<void> {
-  const rows = await withAdminConnection(
-    (sql) =>
-      sql<
-        { datname: string }[]
-      >`select datname from pg_database where datname like 'nozdormu_test_%'`,
+  const rows = databaseNames.parse(
+    await withAdminConnection(
+      (sql) => sql`select datname from pg_database where datname like 'nozdormu_test_%'`,
+    ),
   );
   for (const { datname } of rows) {
     const createdAt = testDatabaseName.exec(datname)?.[1];

@@ -8,8 +8,7 @@ import {
 import { createCommandRegistrationStore } from "@nozdormu/db";
 import { Client, Events, GatewayIntentBits, REST } from "discord.js";
 import { createFeatures } from "./features.ts";
-import { explainDiscordRejection } from "./startup-failures.ts";
-import { connectDatabaseOrExit, loadConfigOrExit } from "./startup.ts";
+import { connectDatabaseOrExit, exitOnDiscordRejection, loadConfigOrExit } from "./startup.ts";
 
 const logger = createLogger();
 
@@ -31,12 +30,7 @@ async function main(): Promise<void> {
     );
   } catch (error) {
     await database.close();
-    const problem = explainDiscordRejection(error);
-    if (problem === undefined) {
-      throw error;
-    }
-    logger.fatal({ event: "config.rejected", problems: [problem] }, "Discord rejected a setting");
-    process.exit(1);
+    exitOnDiscordRejection(error, logger);
   }
 
   const client = new Client({ intents: [GatewayIntentBits.Guilds] });
@@ -62,7 +56,12 @@ async function main(): Promise<void> {
     });
   }
 
-  await client.login(discord.token);
+  try {
+    await client.login(discord.token);
+  } catch (error) {
+    await database.close();
+    exitOnDiscordRejection(error, logger);
+  }
 }
 
 main().catch((error: unknown) => {

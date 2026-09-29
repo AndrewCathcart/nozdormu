@@ -1,7 +1,7 @@
 import type { Logger } from "@nozdormu/core";
 import { connectDatabase, type DatabaseConnection } from "@nozdormu/db";
 import { type Config, loadConfig } from "./config.ts";
-import { explainDatabaseFailure } from "./startup-failures.ts";
+import { explainDatabaseFailure, explainDiscordRejection } from "./startup-failures.ts";
 
 // Shared by the bot and the migrate script: both stop with a message naming the bad setting.
 
@@ -28,4 +28,14 @@ export async function connectDatabaseOrExit(
     }
     throw error;
   }
+}
+
+// Exits with a message naming the setting if Discord rejected one; rethrows anything else.
+export function exitOnDiscordRejection(error: unknown, logger: Pick<Logger, "fatal">): never {
+  const problem = explainDiscordRejection(error);
+  if (problem === undefined) {
+    throw error;
+  }
+  logger.fatal({ event: "config.rejected", problems: [problem] }, "Discord rejected a setting");
+  process.exit(1);
 }

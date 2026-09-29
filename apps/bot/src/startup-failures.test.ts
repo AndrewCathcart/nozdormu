@@ -21,6 +21,15 @@ describe("explainDiscordRejection", () => {
     );
   });
 
+  it("blames the token when discord.js refuses it at login", () => {
+    // discord.js's DiscordjsError has a private constructor; this is its shape for a bad token.
+    const invalidToken = Object.assign(new Error("An invalid token was provided."), {
+      code: "TokenInvalid",
+    });
+
+    expect(explainDiscordRejection(invalidToken)).toBe("Discord rejected DISCORD_TOKEN.");
+  });
+
   it("blames the server ID when Discord answers Missing Access", () => {
     expect(explainDiscordRejection(registrationError(50001, 403, "Missing Access"))).toBe(
       "The bot can't access the server in DISCORD_GUILD_ID. Check the ID, and that the bot has been added to that server.",
@@ -50,6 +59,16 @@ describe("explainDatabaseFailure", () => {
     const refused = Object.assign(new AggregateError([], ""), { code: "ECONNREFUSED" });
 
     expect(explainDatabaseFailure(refused)).toBe(
+      "Couldn't reach the database server in DATABASE_URL.",
+    );
+  });
+
+  it("blames the server address when the connection times out", () => {
+    const timedOut = Object.assign(new Error("write CONNECT_TIMEOUT 10.255.255.1:5432"), {
+      code: "CONNECT_TIMEOUT",
+    });
+
+    expect(explainDatabaseFailure(timedOut)).toBe(
       "Couldn't reach the database server in DATABASE_URL.",
     );
   });
