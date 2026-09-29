@@ -516,4 +516,73 @@ describe("/dungeon's quests", () => {
       },
     });
   });
+
+  it("offers a button to switch to the quests, under the card for a dungeon with quests", async () => {
+    const command = createDungeonCommand(createFakeStore([hollowWithQuests]));
+
+    const reply = await command.handle(invoke("The Made-up Hollow"));
+
+    expect(reply.components).toEqual(switchButtons("loot", 2));
+  });
+
+  it("switches back to the bosses and loot when that's pressed", async () => {
+    const command = createDungeonCommand(createFakeStore([hollowWithQuests]));
+
+    const response = await command.press?.({ customId: "dungeon:loot:The Made-up Hollow" });
+
+    expect(response).toEqual({
+      kind: "update",
+      message: {
+        ...(await command.handle(invoke("The Made-up Hollow"))),
+        components: switchButtons("loot", 2),
+      },
+    });
+  });
+
+  it("replies privately when the dungeon is no longer stored", async () => {
+    const command = createDungeonCommand(createFakeStore([]));
+
+    const response = await command.press?.({ customId: "dungeon:quests:The Made-up Hollow" });
+
+    expect(response).toEqual({
+      kind: "reply",
+      message: {
+        content: "I couldn't find that dungeon any more. Look it up again with /dungeon.",
+        flags: MessageFlags.Ephemeral,
+      },
+    });
+  });
+
+  it("shows fewer rewards per quest when the quests won't all fit on one card", async () => {
+    // 20 quests with 6 rewards each come to about 10,000 characters, where a card allows 6,000.
+    // Each quest's section takes 168 characters without rewards and 64 more a reward, and the
+    // card's heading and footer 95, so one reward each fits (4,735) and two don't (6,015).
+    const busy: StoredDungeon = {
+      ...hollow,
+      quests: Array.from({ length: 20 }, (_quest, quest) => ({
+        id: 91_000 + quest,
+        name: `Made-up Quest ${String(quest + 1)}`,
+        side: "Both",
+        className: undefined,
+        requiredLevel: 13,
+        xp: 1000,
+        objective: "Bring made-up things to a made-up person.",
+        rewards: Array.from({ length: 6 }, (_reward, reward) => ({
+          itemId: 282_000 + reward,
+          name: `Made-up Reward ${String(reward + 1)}`,
+          scanned: undefined,
+        })),
+      })),
+    };
+    const command = createDungeonCommand(createFakeStore([busy]));
+
+    const response = await command.press?.({ customId: "dungeon:quests:The Made-up Hollow" });
+
+    const [questsCard] = response?.message.embeds ?? [];
+    expect(questsCard === undefined ? 0 : cardLength(questsCard)).toBeLessThanOrEqual(6000);
+    expect(questsCard?.fields?.[0]?.value.split("\n").slice(-2)).toEqual([
+      "[Made-up Reward 1](https://www.wowhead.com/forever/item=282000)",
+      "and 5 more",
+    ]);
+  });
 });
