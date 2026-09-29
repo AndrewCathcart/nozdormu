@@ -154,12 +154,21 @@ describe("build check", () => {
     expect(deps.store.replaceBuild.mock.calls[0]?.[0].version).toBe("1.60.1.70009");
   });
 
+  // During a deploy the old version keeps running, and mustn't undo the new version's import.
+  it("doesn't import again a build imported by a newer version of the import", async () => {
+    const deps = createDeps("1.60.1.70009", "1.60.1.70009", importFormat + 1);
+
+    await createBuildCheckJob(deps).run();
+
+    expect(deps.store.replaceBuild).not.toHaveBeenCalled();
+  });
+
   it("records the import format with each build", async () => {
     const deps = createDeps("1.60.1.70009", "1.60.1.69893");
 
     await createBuildCheckJob(deps).run();
 
-    expect(deps.store.replaceBuild.mock.calls[0]?.[0].format).toBe(importFormat);
+    expect(deps.store.replaceBuild.mock.calls[0]?.[0].format).toBe(2);
   });
 
   it("ignores a build that isn't Forever's", async () => {

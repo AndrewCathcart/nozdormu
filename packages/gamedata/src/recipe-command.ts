@@ -4,6 +4,9 @@ import type { GameDataStore } from "./game-data-store.ts";
 import { escapeMarkdown, notLoaded, parseId, toChoices } from "./lookup.ts";
 import type { RecipeRecord } from "./recipes.ts";
 
+// Builds imported before recipes were (import format 1) have none until the next build check.
+const firstFormatWithRecipes = 2;
+
 const notFound: CommandReply = {
   content: "I couldn't find that recipe. Start typing its name and pick one of the suggestions.",
   flags: MessageFlags.Ephemeral,
@@ -66,7 +69,10 @@ export function createRecipeCommand(
       const text = typeof value === "string" ? value.trim() : "";
       const recipe = text === "" ? undefined : await find(text);
       if (recipe === undefined) {
-        return (await store.importedBuild()) === undefined ? notLoaded("recipe") : notFound;
+        const imported = await store.importedBuild();
+        return imported === undefined || imported.format < firstFormatWithRecipes
+          ? notLoaded("recipe")
+          : notFound;
       }
       const itemNames = await store.itemNames([
         recipe.itemId,

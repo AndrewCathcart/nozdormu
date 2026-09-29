@@ -87,7 +87,8 @@ export function createBuildCheckJob(deps: BuildCheckDeps): ScheduledJob {
       return;
     }
     const imported = await deps.store.importedBuild();
-    if (imported?.version === latest && imported.format === importFormat) {
+    // A newer format means a newer version of the bot stored it, while this one is shutting down.
+    if (imported?.version === latest && imported.format >= importFormat) {
       return;
     }
     const startedAt = performance.now();

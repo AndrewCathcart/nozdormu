@@ -140,7 +140,7 @@ describe("/recipe", () => {
     });
   });
 
-  it("suggests matching recipes, labelled with their professions and where they turn yellow, valued by their spell ID", async () => {
+  it("suggests matching recipes, labelled with their professions, valued by their spell ID", async () => {
     const suit = {
       ...transmute,
       spellId: 900_002,
@@ -148,17 +148,31 @@ describe("/recipe", () => {
       professions: ["Tailoring", "Leatherworking"],
       skillLevels: undefined,
     };
-    const command = createRecipeCommand(createFakeStore([transmute, suit]));
+    const command = createRecipeCommand(createFakeStore([suit]));
 
     const choices = await command.autocomplete?.({
       commandName: "recipe",
       optionName: "name",
-      value: "made-up",
+      value: "ogre",
+    });
+
+    expect(choices).toEqual([
+      { name: "Made-up Ogre Suit (Tailoring or Leatherworking)", value: "900002" },
+    ]);
+  });
+
+  // Recipes can share a name and profession (Forever remade some), but not where they turn yellow.
+  it("adds where a recipe turns yellow to its suggestion", async () => {
+    const command = createRecipeCommand(createFakeStore([transmute]));
+
+    const choices = await command.autocomplete?.({
+      commandName: "recipe",
+      optionName: "name",
+      value: "metal",
     });
 
     expect(choices).toEqual([
       { name: "Transmute: Made-up Metal (Alchemy, yellow at 275)", value: "900001" },
-      { name: "Made-up Ogre Suit (Tailoring or Leatherworking)", value: "900002" },
     ]);
   });
 
@@ -174,6 +188,18 @@ describe("/recipe", () => {
 
     expect(choices).toEqual([]);
     expect(store.searchRecipes).not.toHaveBeenCalled();
+  });
+
+  // Straight after the deploy that adds recipes, until the next build check.
+  it("says the recipe data isn't loaded yet when the build was imported before recipes were", async () => {
+    const store = createFakeStore([]);
+    store.importedBuild.mockResolvedValue({ version: "1.60.1.70009", format: 1 });
+    const command = createRecipeCommand(store);
+
+    expect(await command.handle(invoke("metal"))).toEqual({
+      content: "I haven't loaded the recipe data yet. Try again in a minute.",
+      flags: MessageFlags.Ephemeral,
+    });
   });
 
   it("says the recipe data isn't loaded yet when no build has been imported", async () => {

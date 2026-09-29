@@ -3,21 +3,19 @@ import { and, asc, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import type { ItemRecord } from "./item-sparse.ts";
 import type { RecipeRecord, SkillLevels } from "./recipes.ts";
 
+export interface ImportedBuild {
+  readonly version: string;
+  // Which version of the import code stored it (see importFormat in build-check.ts).
+  readonly format: number;
+}
+
 // What a recipe suggestion shows.
 export type RecipeSummary = Pick<RecipeRecord, "spellId" | "name" | "professions" | "skillLevels">;
 
 // Everything imported from one client build.
-export interface GameBuild {
-  readonly version: string;
-  // Which version of the import code produced it (see importFormat in build-check.ts).
-  readonly format: number;
+export interface GameBuild extends ImportedBuild {
   readonly items: readonly ItemRecord[];
   readonly recipes: readonly RecipeRecord[];
-}
-
-export interface ImportedBuild {
-  readonly version: string;
-  readonly format: number;
 }
 
 export interface GameDataStore {

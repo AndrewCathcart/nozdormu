@@ -176,6 +176,15 @@ describe("game data store", () => {
     expect(await store.getItem(2)).toEqual(item(2, "Made-up Helm"));
   });
 
+  it("records the newer format when the same build is imported again", async () => {
+    const store = createGameDataStore(database.db);
+    await importBuild(store, "1.60.1.1110", [item(1, "Made-up Sword")], [], 1);
+
+    await importBuild(store, "1.60.1.1110", [item(1, "Made-up Sword")], [], 2);
+
+    expect(await store.importedBuild()).toEqual({ version: "1.60.1.1110", format: 2 });
+  });
+
   it("records which build it imported, and the import's format", async () => {
     const store = createGameDataStore(database.db);
 
