@@ -64,6 +64,13 @@
       "when": 1790693160818,
       "tag": "0008_dungeons",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1790697779990,
+      "tag": "0009_scanned_items",
+      "breakpoints": true
     }
   ]
 }

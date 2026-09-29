@@ -2,7 +2,8 @@ import type { CommandReply } from "@nozdormu/core";
 import { type APIEmbed, MessageFlags } from "discord-api-types/v10";
 import { describe, expect, it, vi } from "vitest";
 import { createDungeonCommand } from "./dungeon-command.ts";
-import type { DungeonStore, StoredDungeon } from "./dungeon-store.ts";
+import type { DungeonStore, StoredDungeon, StoredLootItem } from "./dungeon-store.ts";
+import type { ScannedItem } from "./spyglass.ts";
 
 const hollow: StoredDungeon = {
   name: "The Made-up Hollow",
@@ -13,13 +14,29 @@ const hollow: StoredDungeon = {
     {
       name: "Made-up Warden",
       loot: [
-        { itemId: 280_101, name: "Made-up Choker" },
-        { itemId: 280_102, name: "Made_up *Bracers*" },
+        {
+          itemId: 280_101,
+          name: "Made-up Choker",
+          scanned: {
+            id: 280_101,
+            name: "Made-up Choker",
+            quality: 3,
+            itemLevel: 18,
+            requiredLevel: 13,
+            itemClass: 4,
+            itemSubclass: 0,
+            slot: "INVTYPE_NECK",
+            stats: [
+              { stat: "STAMINA", value: 4 },
+              { stat: "SPIRIT", value: 2 },
+            ],
+          },
+        },
+        { itemId: 280_102, name: "Made_up *Bracers*", scanned: undefined },
       ],
     },
     { name: "Made-up Tyrant", loot: [] },
   ],
-  build: "1.60.1.69913",
 };
 
 // An in-memory store holding these dungeons.
@@ -35,7 +52,9 @@ function createFakeStore(stored: readonly StoredDungeon[]) {
           .map(({ name, minLevel, maxLevel }) => ({ name, minLevel, maxLevel })),
       ),
     ),
-    loadedBuild: vi.fn<DungeonStore["loadedBuild"]>(() => Promise.resolve(stored[0]?.build)),
+    loadedBuild: vi.fn<DungeonStore["loadedBuild"]>(() =>
+      Promise.resolve(stored.length > 0 ? "1.60.1.69913" : undefined),
+    ),
   } satisfies Pick<DungeonStore, "get" | "list" | "loadedBuild">;
 }
 
@@ -58,6 +77,29 @@ function cardLength(embed: APIEmbed): number {
   ].reduce((total, text) => total + (text ?? "").length, 0);
 }
 
+// A made-up scanned item of this kind, worn in this slot, with these stats.
+function scannedLoot(
+  itemId: number,
+  name: string,
+  kind: { itemClass: number; itemSubclass: number; slot: string },
+  stats: ScannedItem["stats"] = [],
+): StoredLootItem {
+  return {
+    itemId,
+    name,
+    scanned: { id: itemId, name, quality: 3, itemLevel: 18, requiredLevel: 13, ...kind, stats },
+  };
+}
+
+// A reply's first boss's loot lines, for the dungeon holding only this loot.
+async function lootShown(loot: readonly StoredLootItem[]): Promise<string | undefined> {
+  const command = createDungeonCommand(
+    createFakeStore([{ ...hollow, bosses: [{ name: "Made-up Warden", loot }] }]),
+  );
+  const reply = await command.handle(invoke("The Made-up Hollow"));
+  return card(reply).fields?.[0]?.value;
+}
+
 function invoke(name: string) {
   return { commandName: "dungeon", options: new Map([["name", name]]) };
 }
@@ -78,7 +120,7 @@ describe("/dungeon", () => {
             {
               name: "Made-up Warden",
               value: [
-                "[Made-up Choker](https://www.wowhead.com/forever/item=280101)",
+                "[Made-up Choker](https://www.wowhead.com/forever/item=280101) · Neck · +4 Sta, +2 Spi",
                 "[Made\\_up \\*Bracers\\*](https://www.wowhead.com/forever/item=280102)",
               ].join("\n"),
             },
@@ -93,6 +135,157 @@ describe("/dungeon", () => {
     });
   });
 
+  it("shows damage per second, armour and other stats readably", async () => {
+    const stave = scannedLoot(
+      280_103,
+      "Made-up Stave",
+      { itemClass: 2, itemSubclass: 10, slot: "INVTYPE_2HWEAPON" },
+      [
+        { stat: "DAMAGE_PER_SECOND", value: 11.88 },
+        { stat: "RESISTANCE0_NAME", value: 100 },
+        { stat: "SPELL_POWER", value: 18 },
+      ],
+    );
+
+    expect(await lootShown([stave])).toBe(
+      "[Made-up Stave](https://www.wowhead.com/forever/item=280103) · Two-Hand Staff · 11.9 DPS, 100 Armor, +18 Spell Power",
+    );
+  });
+
+  it("lists damage per second or armour first, then the main stats in the game's order", async () => {
+    const bracers = scannedLoot(
+      280_110,
+      "Made-up Bracers",
+      { itemClass: 4, itemSubclass: 2, slot: "INVTYPE_WRIST" },
+      [
+        { stat: "AGILITY", value: 4 },
+        { stat: "INTELLECT", value: 3 },
+        { stat: "RESISTANCE0_NAME", value: 37 },
+        { stat: "SPELL_POWER", value: 6 },
+        { stat: "SPIRIT", value: 2 },
+        { stat: "STAMINA", value: 5 },
+        { stat: "STRENGTH", value: 1 },
+      ],
+    );
+
+    expect(await lootShown([bracers])).toBe(
+      "[Made-up Bracers](https://www.wowhead.com/forever/item=280110) · Leather Wrist · 37 Armor, +1 Str, +4 Agi, +5 Sta, +3 Int, +2 Spi, +6 Spell Power",
+    );
+  });
+
+  it("shows each resistance once, though the game names it two ways", async () => {
+    const boots = scannedLoot(
+      280_111,
+      "Made-up Boots",
+      { itemClass: 4, itemSubclass: 3, slot: "INVTYPE_FEET" },
+      [
+        { stat: "NATURE_RESISTANCE", value: 10 },
+        { stat: "RESISTANCE0_NAME", value: 43 },
+        { stat: "RESISTANCE3_NAME", value: 10 },
+      ],
+    );
+
+    expect(await lootShown([boots])).toBe(
+      "[Made-up Boots](https://www.wowhead.com/forever/item=280111) · Mail Feet · 43 Armor, +10 Nature Resistance",
+    );
+  });
+
+  it("shows crit, hit, dodge, parry, block and haste as the percentages the game's tooltip gives", async () => {
+    // The game stores these as level 60 ratings: 14 crit is 1%, as on the tooltip of Classic's
+    // Devilsaur Gauntlets, and 20 hit is 2%, as on Lionheart Helm's.
+    const ring = scannedLoot(
+      280_112,
+      "Made-up Ring",
+      { itemClass: 4, itemSubclass: 0, slot: "INVTYPE_FINGER" },
+      [
+        { stat: "CRIT_RATING", value: 14 },
+        { stat: "HIT_RATING", value: 20 },
+        { stat: "DODGE_RATING", value: 12 },
+        { stat: "PARRY_RATING", value: 21 },
+        { stat: "BLOCK_RATING", value: 25 },
+        { stat: "HASTE_RATING", value: 10 },
+      ],
+    );
+
+    expect(await lootShown([ring])).toBe(
+      "[Made-up Ring](https://www.wowhead.com/forever/item=280112) · Finger · +1% Crit, +2% Hit, +1% Dodge, +1.4% Parry, +5% Block, +1% Haste",
+    );
+  });
+
+  it("names rarer stats the way players write them", async () => {
+    const charm = scannedLoot(
+      280_113,
+      "Made-up Charm",
+      { itemClass: 4, itemSubclass: 0, slot: "INVTYPE_TRINKET" },
+      [
+        { stat: "ATTACK_POWER_VS_BEAST", value: 3 },
+        { stat: "SPELL_DAMAGE_VS_UNDEAD", value: 18 },
+        { stat: "POWER_REGEN0", value: 5 },
+        { stat: "FROST_DAMAGE_DONE", value: 20 },
+        { stat: "TWOHANDED_AXES", value: 2 },
+        { stat: "DAGGERS", value: 3 },
+        { stat: "SPELL_RESISTANCE_ALL_SCHOOLS", value: 5 },
+      ],
+    );
+
+    expect(await lootShown([charm])).toBe(
+      "[Made-up Charm](https://www.wowhead.com/forever/item=280113) · Trinket · +3 Attack Power vs Beasts, +18 Spell Damage vs Undead, +5 Mana per 5 sec, +20 Frost Spell Damage, +2 Two-Handed Axe Skill, +3 Dagger Skill, +5 All Resistances",
+    );
+  });
+
+  it("names the kind of armour a piece is, except for cloaks, which are all cloth", async () => {
+    const girdle = scannedLoot(
+      280_104,
+      "Made-up Girdle",
+      { itemClass: 4, itemSubclass: 2, slot: "INVTYPE_WAIST" },
+      [{ stat: "STAMINA", value: 4 }],
+    );
+    const cloak = scannedLoot(280_105, "Made-up Cloak", {
+      itemClass: 4,
+      itemSubclass: 1,
+      slot: "INVTYPE_CLOAK",
+    });
+
+    expect(await lootShown([girdle, cloak])).toBe(
+      [
+        "[Made-up Girdle](https://www.wowhead.com/forever/item=280104) · Leather Waist · +4 Sta",
+        "[Made-up Cloak](https://www.wowhead.com/forever/item=280105) · Back",
+      ].join("\n"),
+    );
+  });
+
+  it("names the kind of weapon, with only the kind for a ranged one", async () => {
+    const staff = scannedLoot(280_106, "Made-up Staff", {
+      itemClass: 2,
+      itemSubclass: 10,
+      slot: "INVTYPE_2HWEAPON",
+    });
+    const axe = scannedLoot(280_107, "Made-up Axe", {
+      itemClass: 2,
+      itemSubclass: 1,
+      slot: "INVTYPE_2HWEAPON",
+    });
+    const dagger = scannedLoot(280_108, "Made-up Dagger", {
+      itemClass: 2,
+      itemSubclass: 15,
+      slot: "INVTYPE_WEAPON",
+    });
+    const bow = scannedLoot(280_109, "Made-up Bow", {
+      itemClass: 2,
+      itemSubclass: 2,
+      slot: "INVTYPE_RANGED",
+    });
+
+    expect(await lootShown([staff, axe, dagger, bow])).toBe(
+      [
+        "[Made-up Staff](https://www.wowhead.com/forever/item=280106) · Two-Hand Staff",
+        "[Made-up Axe](https://www.wowhead.com/forever/item=280107) · Two-Hand Axe",
+        "[Made-up Dagger](https://www.wowhead.com/forever/item=280108) · One-Hand Dagger",
+        "[Made-up Bow](https://www.wowhead.com/forever/item=280109) · Bow",
+      ].join("\n"),
+    );
+  });
+
   it("shows fewer items per boss when all the loot won't fit on one card", async () => {
     // 20 bosses with 8 linked items each come to over 10,000 characters, where a card allows 6,000.
     const packed: StoredDungeon = {
@@ -102,6 +295,7 @@ describe("/dungeon", () => {
         loot: Array.from({ length: 8 }, (_item, item) => ({
           itemId: 281_000 + item,
           name: `Made-up Loot Item 0${String(item + 1)}`,
+          scanned: undefined,
         })),
       })),
     };
