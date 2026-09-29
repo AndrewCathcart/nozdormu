@@ -34,7 +34,6 @@ const hollow: StoredDungeon = {
     },
     { name: "Made-up Tyrant", loot: [] },
   ],
-  build: "1.60.1.69913",
 };
 
 // An in-memory store holding these dungeons.
@@ -50,7 +49,9 @@ function createFakeStore(stored: readonly StoredDungeon[]) {
           .map(({ name, minLevel, maxLevel }) => ({ name, minLevel, maxLevel })),
       ),
     ),
-    loadedBuild: vi.fn<DungeonStore["loadedBuild"]>(() => Promise.resolve(stored[0]?.build)),
+    loadedBuild: vi.fn<DungeonStore["loadedBuild"]>(() =>
+      Promise.resolve(stored.length > 0 ? "1.60.1.69913" : undefined),
+    ),
   } satisfies Pick<DungeonStore, "get" | "list" | "loadedBuild">;
 }
 

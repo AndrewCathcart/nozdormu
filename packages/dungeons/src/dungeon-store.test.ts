@@ -36,17 +36,14 @@ function dungeon(name: string, minLevel = 13): Dungeon {
 // Tests share one database, and each sync replaces every dungeon, so each test syncs and reads in
 // one go rather than relying on another test's data.
 describe("dungeon store", () => {
-  it("stores the synced dungeons and gives one back by name, with the build", async () => {
+  it("stores the synced dungeons and gives one back by name", async () => {
     const store = createDungeonStore(database.db);
 
     await store.replaceAll(
       synced("1.60.1.69913", [dungeon("The Made-up Hollow"), dungeon("Made-up Keep")]),
     );
 
-    expect(await store.get("The Made-up Hollow")).toEqual({
-      ...dungeon("The Made-up Hollow"),
-      build: "1.60.1.69913",
-    });
+    expect(await store.get("The Made-up Hollow")).toEqual(dungeon("The Made-up Hollow"));
   });
 
   it("drops a dungeon a later sync doesn't have", async () => {

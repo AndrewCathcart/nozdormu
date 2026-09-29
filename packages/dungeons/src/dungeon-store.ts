@@ -16,8 +16,6 @@ export interface StoredLootItem extends LootItem {
 
 export interface StoredDungeon extends Omit<Dungeon, "bosses"> {
   readonly bosses: readonly { readonly name: string; readonly loot: readonly StoredLootItem[] }[];
-  // The game build Spyglass scanned it in.
-  readonly build: string;
 }
 
 export type DungeonSummary = Pick<Dungeon, "name" | "minLevel" | "maxLevel">;
@@ -170,7 +168,6 @@ export function createDungeonStore(db: Database): DungeonStore {
               scanned: scanned.get(itemId),
             })),
         })),
-        build: found.sourceBuild,
       };
     },
     list: () =>
