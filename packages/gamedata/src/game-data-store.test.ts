@@ -328,7 +328,8 @@ describe("game data store", () => {
       item(4, "Made-up Helm"),
     ]);
 
-    const found = await store.searchItems("sword", 25);
+    await storeScannedItems([]);
+    const found = await store.findItems("sword", 25);
 
     expect(found.map((match) => match.name)).toEqual([
       "Sword-shaped Made-up Charm",
@@ -347,7 +348,9 @@ describe("game data store", () => {
       ),
     );
 
-    expect(await store.searchItems("ring", 25)).toHaveLength(25);
+    await storeScannedItems([]);
+
+    expect(await store.findItems("ring", 25)).toHaveLength(25);
   });
 
   it("matches % and _ in the text literally", async () => {
@@ -357,7 +360,8 @@ describe("game data store", () => {
       item(2, "Made-up Elixir"),
     ]);
 
-    const found = await store.searchItems("%", 25);
+    await storeScannedItems([]);
+    const found = await store.findItems("%", 25);
 
     expect(found.map((match) => match.name)).toEqual(["Made-up 50% Potion"]);
   });
@@ -375,7 +379,8 @@ describe("game data store", () => {
       item(8, "Made-up Bladetester"),
     ]);
 
-    const found = await store.searchItems("blade", 25);
+    await storeScannedItems([]);
+    const found = await store.findItems("blade", 25);
 
     expect(found.map((match) => match.name)).toEqual(["Made-up Blade", "Made-up Bladetester"]);
   });
@@ -384,7 +389,8 @@ describe("game data store", () => {
     const store = createGameDataStore(database.db);
     await importBuild(store, "1.60.1.1010", [item(1, "Made-up High Test Fishing Line")]);
 
-    const found = await store.searchItems("fishing line", 25);
+    await storeScannedItems([]);
+    const found = await store.findItems("fishing line", 25);
 
     expect(found.map((match) => match.name)).toEqual(["Made-up High Test Fishing Line"]);
   });

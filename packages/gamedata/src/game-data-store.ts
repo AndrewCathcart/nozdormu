@@ -37,8 +37,6 @@ export interface GameDataStore {
   // Replaces all the stored data with this build's, in one transaction.
   readonly replaceBuild: (build: GameBuild) => Promise<void>;
   readonly getItem: (id: number) => Promise<ItemRecord | undefined>;
-  // Items whose name contains the text: names starting with it first, then shorter names.
-  readonly searchItems: (text: string, limit: number) => Promise<ItemRecord[]>;
   // Items whose name contains the text, in the client's table or as scanned in the game, each once:
   // names starting with it first, then shorter names.
   readonly findItems: (text: string, limit: number) => Promise<ItemEntry[]>;
@@ -206,19 +204,6 @@ export function createGameDataStore(db: Database): GameDataStore {
     getItem: async (id) => {
       const [found] = await db.select().from(items).where(eq(items.id, id));
       return found;
-    },
-    searchItems: async (text, limit) => {
-      const escaped = escapeLike(text);
-      return db
-        .select()
-        .from(items)
-        .where(and(ilike(items.name, `%${escaped}%`), sql`${items.name} !~* ${unusedName}`))
-        .orderBy(
-          sql`case when ${items.name} ilike ${`${escaped}%`} then 0 else 1 end`,
-          sql`length(${items.name})`,
-          asc(items.name),
-        )
-        .limit(limit);
     },
     findItems: async (text, limit) => {
       const escaped = escapeLike(text);

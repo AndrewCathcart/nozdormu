@@ -71,16 +71,21 @@ const rangedSlots: ReadonlySet<string> = new Set([
 
 // Where an item is worn and what kind it is, such as "Leather Waist", "One-Hand Dagger" or "Bow".
 // Cloaks are all cloth, so the game doesn't say so, and nor does this.
-function kindText(item: ScannedItem): string | undefined {
+export function itemKind(
+  item: Pick<ScannedItem, "slot"> & Partial<Pick<ScannedItem, "itemClass" | "itemSubclass">>,
+): string | undefined {
   const slot = slots.get(item.slot);
   if (item.itemClass === weaponClass) {
-    const kind = weaponKinds.get(item.itemSubclass);
+    const kind = item.itemSubclass === undefined ? undefined : weaponKinds.get(item.itemSubclass);
     if (kind === undefined || slot === undefined) {
       return kind ?? slot;
     }
     return rangedSlots.has(item.slot) ? kind : `${slot} ${kind}`;
   }
-  const kind = item.itemClass === armourClass ? armourKinds.get(item.itemSubclass) : undefined;
+  const kind =
+    item.itemClass === armourClass && item.itemSubclass !== undefined
+      ? armourKinds.get(item.itemSubclass)
+      : undefined;
   if (slot === undefined || kind === undefined || item.slot === "INVTYPE_CLOAK") {
     return slot;
   }
@@ -208,13 +213,17 @@ function statRank({ stat }: ItemStat): number {
 
 // An item's slot, kind and stats, such as "Leather Waist · +4 Sta, +2 Spi", leaving out what it
 // doesn't have.
-export function itemDetails(item: ScannedItem): string {
+// An item's stats as players write them, in the tooltip's order: "37 Armor, +4 Sta".
+export function itemStats(stats: readonly ItemStat[]): string {
   // The game names each resistance two ways, such as "NATURE_RESISTANCE" and "RESISTANCE3_NAME",
   // and lists both, so a stat that reads the same as one before it is left out.
-  const stats = [
-    ...new Set(
-      item.stats.toSorted((a, b) => statRank(a) - statRank(b)).map((stat) => statText(stat)),
-    ),
+  return [
+    ...new Set(stats.toSorted((a, b) => statRank(a) - statRank(b)).map((stat) => statText(stat))),
   ].join(", ");
-  return [kindText(item), stats].filter((part) => part !== undefined && part !== "").join(" · ");
+}
+
+export function itemDetails(item: ScannedItem): string {
+  return [itemKind(item), itemStats(item.stats)]
+    .filter((part) => part !== undefined && part !== "")
+    .join(" · ");
 }
