@@ -7,7 +7,13 @@ export type {
 } from "./feature.ts";
 export { createRegistry } from "./registry.ts";
 export type { DispatchResult, Registry } from "./registry.ts";
-export { registerGuildCommands, routeInteractions } from "./discord.ts";
+export {
+  createChannelPublisher,
+  createRecentPostReader,
+  registerGuildCommands,
+  routeInteractions,
+} from "./discord.ts";
+export type { ChannelMessage, ChannelPublisher, RecentPostReader } from "./discord.ts";
 export { serializeError } from "./errors.ts";
 export type { SerializedError } from "./errors.ts";
 export { registerCommandsIfChanged } from "./command-registration.ts";

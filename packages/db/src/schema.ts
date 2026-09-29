@@ -19,3 +19,25 @@ export const jobRuns = pgTable("job_runs", {
   jobName: text("job_name").primaryKey(),
   lastStartedAt: timestamp("last_started_at", { withTimezone: true }).notNull(),
 });
+
+// YouTube channels the alert has checked at least once, so an empty first check still counts. The
+// baseline is the newest publish time in the feed at that first check: an unseen video no newer
+// than it is an old one resurfacing (say, after a newer one was deleted), not a new upload.
+export const youtubeChannels = pgTable("youtube_channels", {
+  youtubeChannelId: text("youtube_channel_id").primaryKey(),
+  firstCheckedAt: timestamp("first_checked_at", { withTimezone: true }).notNull().defaultNow(),
+  baselinePublishedAt: timestamp("baseline_published_at", { withTimezone: true }),
+});
+
+// Videos the YouTube alert has seen in each watched channel: posted, or already there at the first
+// check.
+export const youtubeVideos = pgTable(
+  "youtube_videos",
+  {
+    youtubeChannelId: text("youtube_channel_id").notNull(),
+    videoId: text("video_id").notNull(),
+    publishedAt: timestamp("published_at", { withTimezone: true }).notNull(),
+    seenAt: timestamp("seen_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [primaryKey({ columns: [table.youtubeChannelId, table.videoId] })],
+);

@@ -6,6 +6,7 @@
     "dev": "pnpm --filter @nozdormu/bot dev",
     "start": "pnpm --filter @nozdormu/bot start",
     "smoke": "pnpm --filter @nozdormu/bot smoke",
+    "job": "pnpm --filter @nozdormu/bot job",
     "db:generate": "pnpm --filter @nozdormu/db generate",
     "db:migrate": "pnpm --filter @nozdormu/bot migrate",
     "prepare": "lefthook install",

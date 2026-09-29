@@ -1,0 +1,16 @@
+{
+  "name": "@nozdormu/youtube",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@nozdormu/core": "workspace:*",
+    "@nozdormu/db": "workspace:*",
+    "drizzle-orm": "catalog:",
+    "fast-xml-parser": "catalog:",
+    "zod": "catalog:"
+  }
+}

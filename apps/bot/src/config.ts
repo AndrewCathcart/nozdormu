@@ -9,6 +9,10 @@ export interface Config {
   readonly database: {
     readonly url: string;
   };
+  readonly youtube: {
+    // The Discord channel new ScotteJaye videos are posted in.
+    readonly alertChannelId: string;
+  };
 }
 
 export type ConfigResult =
@@ -40,6 +44,7 @@ const envSchema = z.object({
   DISCORD_APPLICATION_ID: discordId("DISCORD_APPLICATION_ID"),
   DISCORD_GUILD_ID: discordId("DISCORD_GUILD_ID"),
   DATABASE_URL: postgresUrl("DATABASE_URL"),
+  YOUTUBE_ALERT_CHANNEL_ID: discordId("YOUTUBE_ALERT_CHANNEL_ID"),
 });
 
 export function loadConfig(env: Readonly<Record<string, string | undefined>>): ConfigResult {
@@ -56,6 +61,7 @@ export function loadConfig(env: Readonly<Record<string, string | undefined>>): C
         guildId: parsed.data.DISCORD_GUILD_ID,
       },
       database: { url: parsed.data.DATABASE_URL },
+      youtube: { alertChannelId: parsed.data.YOUTUBE_ALERT_CHANNEL_ID },
     },
   };
 }

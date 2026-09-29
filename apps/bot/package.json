@@ -7,12 +7,14 @@
     "start": "node --env-file-if-exists=../../.env src/main.ts",
     "dev": "node --env-file-if-exists=../../.env --watch src/main.ts",
     "smoke": "node --env-file-if-exists=../../.env scripts/smoke.ts",
-    "migrate": "node --env-file-if-exists=../../.env src/migrate.ts"
+    "migrate": "node --env-file-if-exists=../../.env src/migrate.ts",
+    "job": "node --env-file-if-exists=../../.env scripts/run-job.ts"
   },
   "dependencies": {
     "@nozdormu/core": "workspace:*",
     "@nozdormu/db": "workspace:*",
     "@nozdormu/ping": "workspace:*",
+    "@nozdormu/youtube": "workspace:*",
     "discord.js": "catalog:",
     "zod": "catalog:"
   }

@@ -6,6 +6,7 @@ const validEnv = {
   DISCORD_APPLICATION_ID: "100000000000000001",
   DISCORD_GUILD_ID: "200000000000000002",
   DATABASE_URL: "postgres://made-up-user:made-up-password@localhost:5432/nozdormu",
+  YOUTUBE_ALERT_CHANNEL_ID: "300000000000000003",
 };
 
 describe("loadConfig", () => {
@@ -19,6 +20,7 @@ describe("loadConfig", () => {
           guildId: "200000000000000002",
         },
         database: { url: "postgres://made-up-user:made-up-password@localhost:5432/nozdormu" },
+        youtube: { alertChannelId: "300000000000000003" },
       },
     });
   });
@@ -31,6 +33,7 @@ describe("loadConfig", () => {
           "DISCORD_TOKEN is missing.",
           "DISCORD_GUILD_ID is missing.",
           "DATABASE_URL is missing.",
+          "YOUTUBE_ALERT_CHANNEL_ID is missing.",
         ],
       },
     );
