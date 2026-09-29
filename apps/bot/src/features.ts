@@ -8,6 +8,14 @@ import {
   type ScheduledJob,
 } from "@nozdormu/core";
 import type { Database } from "@nozdormu/db";
+import {
+  createGameDataFeature,
+  createItemStore,
+  createWagoSource,
+  foreverProduct,
+  type GameDataSource,
+  type ItemStore,
+} from "@nozdormu/gamedata";
 import { createPingFeature } from "@nozdormu/ping";
 import {
   createSeenVideoStore,
@@ -27,6 +35,8 @@ export interface FeatureDeps {
   readonly recentPosts: RecentPostReader;
   readonly seenVideos: SeenVideoStore;
   readonly readFeed: FeedReader;
+  readonly items: ItemStore;
+  readonly gameData: GameDataSource;
   readonly logger: Pick<Logger, "info">;
 }
 
@@ -43,6 +53,8 @@ export function createFeatureDeps(
     recentPosts: createRecentPostReader(rest),
     seenVideos: createSeenVideoStore(db),
     readFeed: readFeedOverHttp,
+    items: createItemStore(db),
+    gameData: createWagoSource({ fetch, product: foreverProduct }),
   };
 }
 
@@ -58,6 +70,7 @@ export function createFeatures(deps: FeatureDeps): Feature[] {
       recentPosts: deps.recentPosts,
       logger: deps.logger,
     }),
+    createGameDataFeature({ items: deps.items, source: deps.gameData, logger: deps.logger }),
   ];
 }
 

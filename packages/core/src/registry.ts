@@ -1,6 +1,8 @@
 import { MessageFlags } from "discord-api-types/v10";
 import type { Logger } from "pino";
 import type {
+  AutocompleteChoice,
+  AutocompleteQuery,
   CommandDefinition,
   CommandInvocation,
   CommandReply,
@@ -16,6 +18,7 @@ export type DispatchResult =
 export interface Registry {
   readonly commandDefinitions: readonly CommandDefinition[];
   readonly dispatch: (invocation: CommandInvocation) => Promise<DispatchResult>;
+  readonly autocomplete: (query: AutocompleteQuery) => Promise<readonly AutocompleteChoice[]>;
 }
 
 const unknownCommandReply: CommandReply = {
@@ -27,6 +30,9 @@ const failedReply: CommandReply = {
   content: "Something went wrong. It's been logged.",
   flags: MessageFlags.Ephemeral,
 };
+
+// Discord shows at most 25 suggestions and rejects a longer list.
+export const maxAutocompleteChoices = 25;
 
 export function createRegistry(
   features: readonly Feature[],
@@ -43,6 +49,21 @@ export function createRegistry(
 
   return {
     commandDefinitions: commands.map((command) => command.definition),
+    autocomplete: async (query) => {
+      const autocomplete = commandsByName.get(query.commandName)?.autocomplete;
+      if (autocomplete === undefined) {
+        return [];
+      }
+      try {
+        return (await autocomplete(query)).slice(0, maxAutocompleteChoices);
+      } catch (error) {
+        logger.error(
+          { event: "autocomplete.failed", commandName: query.commandName, err: error },
+          "Autocomplete failed",
+        );
+        return [];
+      }
+    },
     dispatch: async (invocation) => {
       const command = commandsByName.get(invocation.commandName);
       if (command === undefined) {

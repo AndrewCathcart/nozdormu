@@ -3,6 +3,7 @@
 //   pnpm job <job-name> --dry-run  prints what it would post or record, and changes nothing
 // A dry run prints the posts it would make to the terminal, never into the logs.
 import { createLogger } from "@nozdormu/core";
+import type { ItemStore } from "@nozdormu/gamedata";
 import type { SeenVideoStore } from "@nozdormu/youtube";
 import { REST } from "discord.js";
 import {
@@ -15,7 +16,7 @@ import { connectDatabaseOrExit, loadConfigOrExit } from "../src/startup.ts";
 
 const logger = createLogger();
 
-function readOnly(store: SeenVideoStore): SeenVideoStore {
+function readOnlySeenVideos(store: SeenVideoStore): SeenVideoStore {
   return {
     history: store.history,
     recordFirstCheck: (youtubeChannelId, videos) => {
@@ -35,10 +36,24 @@ function readOnly(store: SeenVideoStore): SeenVideoStore {
   };
 }
 
+function readOnlyItems(store: ItemStore): ItemStore {
+  return {
+    ...store,
+    replaceAll: (version, records) => {
+      logger.info(
+        { event: "dry_run.import", version, items: records.length },
+        "Would replace the stored items",
+      );
+      return Promise.resolve();
+    },
+  };
+}
+
 function dryRun(deps: FeatureDeps): FeatureDeps {
   return {
     ...deps,
-    seenVideos: readOnly(deps.seenVideos),
+    seenVideos: readOnlySeenVideos(deps.seenVideos),
+    items: readOnlyItems(deps.items),
     publish: (channelId, message) => {
       console.log(`\nDRY RUN: would post in channel ${channelId}:\n${message.content ?? ""}\n`);
       return Promise.resolve();

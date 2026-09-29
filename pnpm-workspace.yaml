@@ -6,6 +6,7 @@ packages:
 minimumReleaseAge: 1440
 
 catalog:
+  csv-parse: 7.0.3
   discord-api-types: 0.38.55
   discord.js: 14.27.0
   drizzle-orm: 0.45.3

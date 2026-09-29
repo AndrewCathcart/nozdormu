@@ -22,7 +22,8 @@ export async function registerGuildCommands(
   });
 }
 
-// Sends every slash command to the registry and replies with whatever it returns.
+// Sends every slash command to the registry and replies with whatever it returns, and answers
+// autocomplete requests with the registry's suggestions.
 export function routeInteractions(
   client: Client,
   rest: REST,
@@ -30,13 +31,38 @@ export function routeInteractions(
   logger: Pick<Logger, "info" | "error">,
 ): void {
   client.on(Events.InteractionCreate, (interaction) => {
+    if (interaction.isAutocomplete()) {
+      const { commandName, id, token } = interaction;
+      const focused = interaction.options.getFocused(true);
+      registry
+        .autocomplete({ commandName, optionName: focused.name, value: focused.value })
+        .then(async (choices) => {
+          const body = {
+            type: InteractionResponseType.ApplicationCommandAutocompleteResult,
+            data: { choices: [...choices] },
+          } satisfies RESTPostAPIInteractionCallbackJSONBody;
+          await rest.post(Routes.interactionCallback(id, token), { body, auth: false });
+        })
+        .catch((error: unknown) => {
+          logger.error(
+            { event: "autocomplete.reply_failed", commandName, err: error },
+            "Couldn't send suggestions",
+          );
+        });
+      return;
+    }
     if (!interaction.isChatInputCommand()) {
       return;
     }
     const { commandName, id, token } = interaction;
+    const options = new Map(
+      interaction.options.data.flatMap((option) =>
+        option.value === undefined ? [] : [[option.name, option.value] as const],
+      ),
+    );
     const startedAt = performance.now();
     registry
-      .dispatch({ commandName })
+      .dispatch({ commandName, options })
       .then(async (result) => {
         const body = {
           type: InteractionResponseType.ChannelMessageWithSource,

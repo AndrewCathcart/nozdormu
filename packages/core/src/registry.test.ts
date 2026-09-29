@@ -35,6 +35,22 @@ const broken: Feature = {
   ],
 };
 
+const lookup: Feature = {
+  commands: [
+    {
+      definition: { name: "lookup", description: "Look something up." },
+      handle: () => Promise.resolve({ content: "Found it." }),
+      autocomplete: (query) =>
+        Promise.resolve(
+          Array.from({ length: 30 }, (_, index) => ({
+            name: `${query.value} ${String(index + 1)}`,
+            value: String(index + 1),
+          })),
+        ),
+    },
+  ],
+};
+
 function createFakeLogger() {
   return { warn: vi.fn<LogFn>(), error: vi.fn<LogFn>() } satisfies Pick<Logger, "warn" | "error">;
 }
@@ -74,7 +90,7 @@ describe("createRegistry", () => {
     async ({ commandName, content }) => {
       const registry = createRegistry([greetings, weather], createFakeLogger());
 
-      const result = await registry.dispatch({ commandName });
+      const result = await registry.dispatch({ commandName, options: new Map() });
 
       expect(result).toEqual({ kind: "replied", reply: { content } });
     },
@@ -84,7 +100,7 @@ describe("createRegistry", () => {
     const logger = createFakeLogger();
     const registry = createRegistry([greetings, weather], logger);
 
-    await registry.dispatch({ commandName: "bow" });
+    await registry.dispatch({ commandName: "bow", options: new Map() });
 
     expect(logger.warn).not.toHaveBeenCalled();
   });
@@ -92,7 +108,7 @@ describe("createRegistry", () => {
   it("returns an unknown-command result with a private reply instead of throwing", async () => {
     const registry = createRegistry([greetings, weather], createFakeLogger());
 
-    const result = await registry.dispatch({ commandName: "dance" });
+    const result = await registry.dispatch({ commandName: "dance", options: new Map() });
 
     expect(result).toEqual({
       kind: "unknown-command",
@@ -105,7 +121,7 @@ describe("createRegistry", () => {
     const logger = createFakeLogger();
     const registry = createRegistry([greetings, weather], logger);
 
-    await registry.dispatch({ commandName: "dance" });
+    await registry.dispatch({ commandName: "dance", options: new Map() });
 
     expect(logger.warn).toHaveBeenCalledExactlyOnceWith(
       { event: "command.unknown", commandName: "dance" },
@@ -116,7 +132,7 @@ describe("createRegistry", () => {
   it("turns a handler that throws into a failed result with a private error reply", async () => {
     const registry = createRegistry([greetings, broken], createFakeLogger());
 
-    const result = await registry.dispatch({ commandName: "explode" });
+    const result = await registry.dispatch({ commandName: "explode", options: new Map() });
 
     expect(result).toEqual({
       kind: "failed",
@@ -129,11 +145,98 @@ describe("createRegistry", () => {
     const logger = createFakeLogger();
     const registry = createRegistry([greetings, broken], logger);
 
-    await registry.dispatch({ commandName: "explode" });
+    await registry.dispatch({ commandName: "explode", options: new Map() });
 
     expect(logger.error).toHaveBeenCalledExactlyOnceWith(
       { event: "command.failed", commandName: "explode", err: new Error("Kaboom") },
       "Command failed",
+    );
+  });
+
+  it("routes an autocomplete query to its command", async () => {
+    const registry = createRegistry([greetings, lookup], createFakeLogger());
+
+    const choices = await registry.autocomplete({
+      commandName: "lookup",
+      optionName: "name",
+      value: "Sword",
+    });
+
+    expect(choices.slice(0, 2)).toEqual([
+      { name: "Sword 1", value: "1" },
+      { name: "Sword 2", value: "2" },
+    ]);
+  });
+
+  it("keeps the first 25 choices, Discord's limit", async () => {
+    const registry = createRegistry([greetings, lookup], createFakeLogger());
+
+    const choices = await registry.autocomplete({
+      commandName: "lookup",
+      optionName: "name",
+      value: "Sword",
+    });
+
+    expect(choices.map((choice) => choice.value)).toEqual([
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7",
+      "8",
+      "9",
+      "10",
+      "11",
+      "12",
+      "13",
+      "14",
+      "15",
+      "16",
+      "17",
+      "18",
+      "19",
+      "20",
+      "21",
+      "22",
+      "23",
+      "24",
+      "25",
+    ]);
+  });
+
+  it("offers no choices for a command without suggestions", async () => {
+    const registry = createRegistry([greetings, lookup], createFakeLogger());
+
+    expect(
+      await registry.autocomplete({ commandName: "wave", optionName: "name", value: "a" }),
+    ).toEqual([]);
+  });
+
+  it("offers no choices, and logs, when suggesting fails", async () => {
+    const failing: Feature = {
+      commands: [
+        {
+          definition: { name: "lookup", description: "Look something up." },
+          handle: () => Promise.resolve({ content: "Found it." }),
+          autocomplete: () => Promise.reject(new Error("Database is down")),
+        },
+      ],
+    };
+    const logger = createFakeLogger();
+    const registry = createRegistry([failing], logger);
+
+    const choices = await registry.autocomplete({
+      commandName: "lookup",
+      optionName: "name",
+      value: "a",
+    });
+
+    expect(choices).toEqual([]);
+    expect(logger.error).toHaveBeenCalledExactlyOnceWith(
+      { event: "autocomplete.failed", commandName: "lookup", err: new Error("Database is down") },
+      "Autocomplete failed",
     );
   });
 });
