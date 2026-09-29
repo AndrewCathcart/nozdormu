@@ -74,6 +74,13 @@ jobs:
           grep -q '"event":"migrations.applied"' first.log
           docker run --rm --network host $settings nozdormu node apps/bot/src/migrate.ts | tee second.log
           grep -q '"applied":0' second.log
+      # The deploy job only runs on main, so check here that the Railway CLI it uses starts in the
+      # repo, installed the same way.
+      - name: Install the Railway CLI, as the deploy job does
+        working-directory: ${{ runner.temp }}
+        run: npm install --global @railway/cli@5.62.1
+      - name: Check the Railway CLI runs in the repo
+        run: railway --version
 
   # Deploys main to Railway once both jobs pass. Railway runs the migrations as its pre-deploy
   # command (see railway.toml).
@@ -90,6 +97,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - run: npx --yes @railway/cli@5.62.1 up --ci --service nozdormu
+      # Installed outside the repo: inside it, npm reads package.json's devEngines, which ask for
+      # Node 26, and refuses to run on the runner's older Node.
+      - name: Install the Railway CLI
+        working-directory: ${{ runner.temp }}
+        run: npm install --global @railway/cli@5.62.1
+      - name: Deploy
+        run: railway up --ci --service nozdormu
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_SECRET }}
