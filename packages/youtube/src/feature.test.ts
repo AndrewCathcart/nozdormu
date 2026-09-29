@@ -92,7 +92,7 @@ describe("YouTube alert", () => {
     await pollJob(deps).run();
 
     expect(deps.publish).toHaveBeenCalledExactlyOnceWith(alertChannelId, {
-      content: "ScotteJaye just posted a new video!\nhttps://www.youtube.com/watch?v=bbbbbbbbbbb",
+      content: "🚨 NEW SCOTTEJAYE VIDEO 🚨\nhttps://www.youtube.com/watch?v=bbbbbbbbbbb",
       allowed_mentions: { parse: [] },
       nonce: "yt-bbbbbbbbbbb",
       enforce_nonce: true,
@@ -131,7 +131,7 @@ describe("YouTube alert", () => {
   it("doesn't repost a video its recent messages already link to, and records it", async () => {
     const deps = createDeps([videoC, videoB], { seen: [videoB] });
     deps.recentPosts.mockResolvedValue([
-      "ScotteJaye just posted a new video!\nhttps://www.youtube.com/watch?v=ccccccccccc",
+      "🚨 NEW SCOTTEJAYE VIDEO 🚨\nhttps://www.youtube.com/watch?v=ccccccccccc",
     ]);
 
     await pollJob(deps).run();
