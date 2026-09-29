@@ -31,7 +31,7 @@ const maxMessageLength = 2000;
 
 // The client data can't tell a trainer's spells from those a class quest gives, such as a warrior's
 // Defensive Stance.
-const credit = "-# Game data from wago.tools. A few come from class quests, not the trainer.";
+const questNote = "-# A few come from class quests, not the trainer.";
 
 const invalidOptions: CommandReply = {
   content: `Pick a class from the list, and a level from 1 to ${String(maxLevel)}.`,
@@ -54,15 +54,15 @@ function describeSpell(spell: ClassSpell): string {
   ].join("");
 }
 
-// The heading, the spells and the credit, leaving spells off the end with a count of them when
-// the whole list won't fit in one message.
+// The heading, the spells and the note about quests, leaving spells off the end with a count of
+// them when the whole list won't fit in one message.
 function spellList(heading: string, spells: readonly ClassSpell[]): CommandReply {
   const lines = spells.map(describeSpell);
   const withShown = (shown: number): string[] => [
     heading,
     ...lines.slice(0, shown),
     ...(shown < lines.length ? [`…and ${String(lines.length - shown)} more`] : []),
-    credit,
+    questNote,
   ];
   let shown = lines.length;
   while (shown > 0 && withShown(shown).join("\n").length > maxMessageLength) {
@@ -135,7 +135,7 @@ export function createTrainCommand(
       if (next === undefined) {
         return reply([
           `${aClassMember} learns nothing new at level ${String(level)} or later.`,
-          credit,
+          questNote,
         ]);
       }
       return spellList(

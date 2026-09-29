@@ -100,7 +100,7 @@ describe("/dungeon", () => {
             { name: "Made-up Tyrant", value: "No loot seen yet" },
           ],
           footer: {
-            text: "Bosses and loot from Spyglass's scans, as of build 1.60.1.69913. Loot may be incomplete, and has no drop chances.",
+            text: "Loot may be incomplete, and has no drop chances.",
           },
         },
       ],

@@ -49,7 +49,7 @@ function invoke(classId: number, level: number) {
   };
 }
 
-const credit = "-# Game data from wago.tools. A few come from class quests, not the trainer.";
+const questNote = "-# A few come from class quests, not the trainer.";
 
 const link = (spellId: number): string =>
   `https://www.wowhead.com/forever/spell=${String(spellId)}`;
@@ -63,7 +63,7 @@ describe("/train", () => {
         "**New warrior spells at level 10**",
         `- [Made-up Stance](${link(800_002)})`,
         `- [Made-up Strike](${link(800_001)}) (Rank 2)`,
-        credit,
+        questNote,
       ].join("\n"),
       allowed_mentions: { parse: [] },
       flags: MessageFlags.SuppressEmbeds,
@@ -80,7 +80,7 @@ describe("/train", () => {
       `- [Made-up Prayer](${link(800_005)}) · Human and Dwarf only`,
       `- [Made-up Shout](${link(800_003)}) (Rank 1)`,
       `- [Made-up Starshards](${link(800_004)}) (Rank 1) · Night Elf only`,
-      credit,
+      questNote,
     ]);
   });
 
@@ -102,7 +102,7 @@ describe("/train", () => {
     const reply = await command.handle(invoke(1, 13));
 
     expect(reply.content).toBe(
-      ["A warrior learns nothing new at level 13 or later.", credit].join("\n"),
+      ["A warrior learns nothing new at level 13 or later.", questNote].join("\n"),
     );
   });
 
@@ -127,7 +127,7 @@ describe("/train", () => {
 
     expect((reply.content ?? "").length).toBeLessThanOrEqual(2000);
     expect(lines.at(-2)).toBe(`…and ${String(60 - (lines.length - 3))} more`);
-    expect(lines.at(-1)).toBe(credit);
+    expect(lines.at(-1)).toBe(questNote);
   });
 
   it("replies privately to a class or level the list doesn't offer", async () => {

@@ -69,7 +69,6 @@ describe("/recipe", () => {
         "Turns yellow at 275 and grey at 290",
         "Taught by Recipe: Transmute Made-up Metal",
         "https://www.wowhead.com/forever/item=270001",
-        "-# Recipe data from wago.tools",
       ].join("\n"),
       allowed_mentions: { parse: [] },
     });
@@ -94,7 +93,6 @@ describe("/recipe", () => {
         "Turns yellow at 275 and grey at 290",
         "Taught by Formula: Enchant Made-up Bracer - Testing",
         "https://www.wowhead.com/forever/spell=900001",
-        "-# Recipe data from wago.tools",
       ].join("\n"),
     );
   });
@@ -110,7 +108,6 @@ describe("/recipe", () => {
         "**Transmute: Made-up Metal** · Alchemy",
         "Makes 1 × Made-up Metal Bar",
         "https://www.wowhead.com/forever/item=270001",
-        "-# Recipe data from wago.tools",
       ].join("\n"),
     );
   });
