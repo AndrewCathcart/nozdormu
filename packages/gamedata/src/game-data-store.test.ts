@@ -26,8 +26,7 @@ function recipe(spellId: number, name: string): RecipeRecord {
     spellId,
     name,
     professions: ["Blacksmithing", "Leatherworking"],
-    itemId: 1,
-    itemCount: 2,
+    result: { kind: "item", itemId: 1, count: 2 },
     reagents: [
       { itemId: 3, count: 4 },
       { itemId: 2, count: 1 },
@@ -116,7 +115,12 @@ describe("game data store", () => {
       store,
       "1.60.1.1106",
       [item(7, "Made-up Metal Bar")],
-      [{ ...recipe(900_001, "Transmute: Made-up Metal"), itemId: 7 }],
+      [
+        {
+          ...recipe(900_001, "Transmute: Made-up Metal"),
+          result: { kind: "item", itemId: 7, count: 1 },
+        },
+      ],
     );
 
     const found = await store.searchRecipes("metal bar", 25);

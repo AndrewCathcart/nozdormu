@@ -17,6 +17,13 @@ export interface SkillLevels {
   readonly greyAt: number;
 }
 
+// What a recipe does: makes an item.
+export type RecipeResult = {
+  readonly kind: "item";
+  readonly itemId: number;
+  readonly count: number;
+};
+
 export interface Reagent {
   readonly itemId: number;
   readonly count: number;
@@ -28,8 +35,7 @@ export interface RecipeRecord {
   readonly name: string;
   // Usually one; a few recipes belong to two professions.
   readonly professions: readonly string[];
-  readonly itemId: number;
-  readonly itemCount: number;
+  readonly result: RecipeResult;
   readonly reagents: readonly Reagent[];
   // Undefined where the game data has none.
   readonly skillLevels: SkillLevels | undefined;
@@ -178,9 +184,12 @@ export function parseRecipes(tables: Readonly<Record<RecipeTable, string>>): Rec
       spellId: ability.Spell,
       name,
       professions: [profession.DisplayName_lang],
-      itemId: made.EffectItemType,
-      // Like the game server, treat a count below 1 as 1.
-      itemCount: Math.max(1, Math.round(made.EffectBasePointsF)),
+      result: {
+        kind: "item",
+        itemId: made.EffectItemType,
+        // Like the game server, treat a count below 1 as 1.
+        count: Math.max(1, Math.round(made.EffectBasePointsF)),
+      },
       reagents: reagents.get(ability.Spell) ?? [],
       // The game data has 0 for "none".
       skillLevels:

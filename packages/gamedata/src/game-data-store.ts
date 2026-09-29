@@ -83,8 +83,8 @@ export function createGameDataStore(db: Database): GameDataStore {
             spellId: recipe.spellId,
             name: recipe.name,
             professions: [...recipe.professions],
-            itemId: recipe.itemId,
-            itemCount: recipe.itemCount,
+            itemId: recipe.result.itemId,
+            itemCount: recipe.result.count,
             yellowAt: recipe.skillLevels?.yellowAt ?? null,
             greyAt: recipe.skillLevels?.greyAt ?? null,
             taughtBy: [...recipe.taughtBy],
@@ -152,11 +152,14 @@ export function createGameDataStore(db: Database): GameDataStore {
         .from(recipeReagents)
         .where(eq(recipeReagents.spellId, spellId))
         .orderBy(asc(recipeReagents.position));
-      const { yellowAt, greyAt, ...recipe } = found;
       return {
-        ...recipe,
-        skillLevels: skillLevelsOf(yellowAt, greyAt),
+        spellId: found.spellId,
+        name: found.name,
+        professions: found.professions,
+        result: { kind: "item", itemId: found.itemId, count: found.itemCount },
         reagents,
+        skillLevels: skillLevelsOf(found.yellowAt, found.greyAt),
+        taughtBy: found.taughtBy,
       };
     },
     searchRecipes: async (text, limit) => {

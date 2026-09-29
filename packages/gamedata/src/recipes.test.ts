@@ -41,8 +41,7 @@ describe("parseRecipes", () => {
         spellId: 900_001,
         name: "Made-up Sword of Testing",
         professions: ["Blacksmithing"],
-        itemId: 270_001,
-        itemCount: 1,
+        result: { kind: "item", itemId: 270_001, count: 1 },
         reagents: [
           { itemId: 270_010, count: 3 },
           { itemId: 270_011, count: 1 },
@@ -71,7 +70,9 @@ describe("parseRecipes", () => {
       }),
     );
 
-    expect(recipes.map((recipe) => recipe.itemCount)).toEqual([1]);
+    expect(recipes.map((recipe) => recipe.result)).toEqual([
+      { kind: "item", itemId: 270_001, count: 1 },
+    ]);
   });
 
   it("takes the item from the effect that makes it, ignoring the spell's other effects", () => {
@@ -81,7 +82,9 @@ describe("parseRecipes", () => {
       }),
     );
 
-    expect(recipes.map((recipe) => [recipe.itemId, recipe.itemCount])).toEqual([[270_001, 1]]);
+    expect(recipes.map((recipe) => recipe.result)).toEqual([
+      { kind: "item", itemId: 270_001, count: 1 },
+    ]);
   });
 
   // Mages' Conjure spells make items too, from a class skill line (category 7).

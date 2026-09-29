@@ -17,7 +17,7 @@ function describeRecipe(recipe: RecipeRecord, itemNames: ReadonlyMap<number, str
     escapeMarkdown(itemNames.get(id) ?? `item ${String(id)}`);
   return [
     `**${escapeMarkdown(recipe.name)}** · ${recipe.professions.join(" or ")}`,
-    `Makes ${String(recipe.itemCount)} × ${itemName(recipe.itemId)}`,
+    `Makes ${String(recipe.result.count)} × ${itemName(recipe.result.itemId)}`,
     ...(recipe.reagents.length > 0
       ? [
           `Reagents: ${recipe.reagents.map((reagent) => `${String(reagent.count)} × ${itemName(reagent.itemId)}`).join(", ")}`,
@@ -31,7 +31,7 @@ function describeRecipe(recipe: RecipeRecord, itemNames: ReadonlyMap<number, str
     ...(recipe.taughtBy.length > 0
       ? [`Taught by ${recipe.taughtBy.map(itemName).join(" or ")}`]
       : []),
-    `https://www.wowhead.com/forever/item=${String(recipe.itemId)}`,
+    `https://www.wowhead.com/forever/item=${String(recipe.result.itemId)}`,
     "-# Recipe data from wago.tools",
   ].join("\n");
 }
@@ -75,7 +75,7 @@ export function createRecipeCommand(
           : notFound;
       }
       const itemNames = await store.itemNames([
-        recipe.itemId,
+        recipe.result.itemId,
         ...recipe.reagents.map((reagent) => reagent.itemId),
         ...recipe.taughtBy,
       ]);

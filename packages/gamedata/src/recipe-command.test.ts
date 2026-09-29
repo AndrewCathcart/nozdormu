@@ -8,8 +8,7 @@ const transmute: RecipeRecord = {
   spellId: 900_001,
   name: "Transmute: Made-up Metal",
   professions: ["Alchemy"],
-  itemId: 270_001,
-  itemCount: 1,
+  result: { kind: "item", itemId: 270_001, count: 1 },
   reagents: [
     { itemId: 270_010, count: 1 },
     { itemId: 270_011, count: 2 },
@@ -101,7 +100,11 @@ describe("/recipe", () => {
   });
 
   it("escapes Markdown in recipe and item names", async () => {
-    const starred = { ...transmute, name: "Made-up *Starred* Brew", itemId: 270_012 };
+    const starred: RecipeRecord = {
+      ...transmute,
+      name: "Made-up *Starred* Brew",
+      result: { kind: "item", itemId: 270_012, count: 1 },
+    };
     const command = createRecipeCommand(createFakeStore([starred]));
 
     const reply = await command.handle(invoke("900001"));
