@@ -15,7 +15,7 @@ export interface GameDataSource {
 
 export interface BuildCheckDeps {
   readonly source: GameDataSource;
-  readonly store: GameDataStore;
+  readonly store: Pick<GameDataStore, "importedVersion" | "replaceBuild">;
   readonly logger: Pick<Logger, "info">;
 }
 
@@ -52,7 +52,7 @@ export function createBuildCheckJob(deps: BuildCheckDeps): ScheduledJob {
         `wago.tools gave only ${String(records.length)} items for build ${latest}, so the stored items were kept.`,
       );
     }
-    await deps.store.replaceBuild({ version: latest, items: records });
+    await deps.store.replaceBuild({ version: latest, items: records, recipes: [] });
     deps.logger.info(
       {
         event: "gamedata.imported",

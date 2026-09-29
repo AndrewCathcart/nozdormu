@@ -62,3 +62,31 @@ export const items = pgTable(
   },
   (table) => [index("items_name_trigram").using("gin", table.name.op("gin_trgm_ops"))],
 );
+
+// Profession recipes, replaced wholesale with the items by each import. Keyed by the recipe's
+// spell. Skill levels are 0 where the game data has none.
+export const recipes = pgTable("recipes", {
+  spellId: integer("spell_id").primaryKey(),
+  name: text("name").notNull(),
+  professions: text("professions").array().notNull(),
+  itemId: integer("item_id").notNull(),
+  itemCount: integer("item_count").notNull(),
+  yellowAt: integer("yellow_at").notNull(),
+  greyAt: integer("grey_at").notNull(),
+  // The recipe items that teach it.
+  taughtBy: integer("taught_by").array().notNull(),
+});
+
+// Each recipe's reagents, in the game's order.
+export const recipeReagents = pgTable(
+  "recipe_reagents",
+  {
+    spellId: integer("spell_id")
+      .notNull()
+      .references(() => recipes.spellId, { onDelete: "cascade" }),
+    position: integer("position").notNull(),
+    itemId: integer("item_id").notNull(),
+    count: integer("count").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.spellId, table.position] })],
+);

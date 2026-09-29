@@ -34,8 +34,6 @@ function createDeps(latest: string, imported?: string) {
     store: {
       importedVersion: vi.fn<GameDataStore["importedVersion"]>().mockResolvedValue(imported),
       replaceBuild: vi.fn<GameDataStore["replaceBuild"]>().mockResolvedValue(undefined),
-      getItem: vi.fn<GameDataStore["getItem"]>(),
-      searchItems: vi.fn<GameDataStore["searchItems"]>(),
     },
     logger: { info: vi.fn<Logger["info"]>() } satisfies Pick<Logger, "info">,
   };
