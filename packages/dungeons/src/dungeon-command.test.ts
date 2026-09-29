@@ -517,7 +517,7 @@ const buttonsShowingQuests = [
 ];
 
 describe("/dungeon's quests", () => {
-  it("shows the dungeon's quests, lowest level first, with those known only by name gathered last", async () => {
+  it("shows the dungeon's quests, lowest level first, when Quests is pressed", async () => {
     const command = createDungeonCommand(createFakeStore([hollowWithQuests]));
 
     const response = await command.press?.({ customId: "dungeon:quests:The Made-up Hollow" });
@@ -731,8 +731,47 @@ describe("/dungeon's quests", () => {
 
     const response = await command.press?.({ customId: "dungeon:quests:The Made-up Hollow" });
 
-    const value = response?.message.embeds?.[0]?.fields?.[0]?.value ?? "";
-    expect(value.split(" · ").length).toBe(9);
-    expect(value.endsWith(" · and 12 more")).toBe(true);
+    expect(response?.message.embeds?.[0]?.fields?.[0]?.value).toBe(
+      [
+        ...Array.from(
+          { length: 8 },
+          (_quest, quest) =>
+            `[Made-up Quest ${String(quest + 10)} ${"x".repeat(50)}](https://www.wowhead.com/forever/quest=${String(90_300 + quest)})`,
+        ),
+        "and 12 more",
+      ].join(" · "),
+    );
+  });
+
+  it("leaves out the quests known only by name before any quest with details, when not all fit", async () => {
+    // 11 quests with 400-letter objectives take 5,789 characters with the title, levels and footer
+    // (see the test above), leaving no room for the 983-character section of 20 long names.
+    const crowded: StoredDungeon = {
+      ...hollow,
+      quests: [
+        ...Array.from({ length: 11 }, (_quest, quest) => ({
+          id: 91_000 + quest,
+          name: `Made-up Quest ${String(quest + 1)}`,
+          side: "Both" as const,
+          className: undefined,
+          requiredLevel: 13,
+          xp: 1000,
+          objective: "a".repeat(400),
+          rewards: [],
+        })),
+        ...Array.from({ length: 20 }, (_quest, quest) =>
+          nameOnly(90_300 + quest, `Made-up Quest ${String(quest + 10)} ${"x".repeat(50)}`),
+        ),
+      ],
+    };
+    const command = createDungeonCommand(createFakeStore([crowded]));
+
+    const response = await command.press?.({ customId: "dungeon:quests:The Made-up Hollow" });
+
+    const [questsCard] = response?.message.embeds ?? [];
+    expect(questsCard?.fields?.length).toBe(11);
+    expect(questsCard?.footer?.text).toBe(
+      "Quests and their details may be incomplete. 20 more quests didn't fit.",
+    );
   });
 });
