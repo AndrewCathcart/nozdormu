@@ -61,11 +61,9 @@ function createFakeStore(state: FeedState | "never checked") {
       checkFeed(name);
       return Promise.resolve(history);
     }),
-    recordFirstCheck: vi.fn<SeenPostStore["recordFirstCheck"]>((name, posts) => {
+    recordFirstCheck: vi.fn<SeenPostStore["recordFirstCheck"]>((name, posts, baseline) => {
       checkFeed(name);
-      // As the real store does: the newest post recorded is the baseline.
-      const times = posts.map((seenPost) => seenPost.createdAt.getTime());
-      history = { baseline: times.length === 0 ? undefined : new Date(Math.max(...times)) };
+      history = { baseline };
       for (const seenPost of posts) {
         ids.add(seenPost.id);
       }
@@ -135,16 +133,34 @@ describe("createBluePostsFeature", () => {
     expect(postedUrls(deps)).toEqual([post(3).url, post(4).url, post(5).url]);
   });
 
-  it("records the older posts at the first check without posting them", async () => {
+  it("records the older posts at the first check, and a baseline just before the oldest it posts", async () => {
     const deps = createDeps([post(5), post(4), post(3), post(2), post(1)], "never checked");
 
     await pollJob(deps).run();
 
-    expect(deps.seenPosts.recordFirstCheck).toHaveBeenCalledExactlyOnceWith(feed, [
-      post(2),
-      post(1),
-    ]);
+    expect(deps.seenPosts.recordFirstCheck).toHaveBeenCalledExactlyOnceWith(
+      feed,
+      [post(2), post(1)],
+      new Date(post(3).createdAt.getTime() - 1),
+    );
+  });
+
+  it("records each post the first check posts, as it posts it", async () => {
+    const deps = createDeps([post(5), post(4), post(3), post(2), post(1)], "never checked");
+
+    await pollJob(deps).run();
+
     expect(deps.seenPosts.ids).toEqual(new Set([1, 2, 3, 4, 5]));
+  });
+
+  it("doesn't post an older post that turns up after a first check that posted all it found", async () => {
+    const deps = createDeps([post(3), post(2), post(1)], "never checked");
+    await pollJob(deps).run();
+    deps.readPosts.mockResolvedValue([post(3), post(2), post(1), post(0)]);
+
+    await pollJob(deps).run();
+
+    expect(postedUrls(deps)).toEqual([post(1).url, post(2).url, post(3).url]);
   });
 
   it("posts only the latest three at the first check, whatever the store gives back after", async () => {

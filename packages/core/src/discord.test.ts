@@ -118,9 +118,7 @@ describe("createChannelPublisher", () => {
       body: { content: "Second" },
     });
   });
-});
 
-describe("createChannelPublisher", () => {
   it("posts the message in the channel, uploading any files with it", async () => {
     const rest = { post: vi.fn<REST["post"]>().mockResolvedValue({}) } satisfies Pick<REST, "post">;
 

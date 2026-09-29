@@ -16,31 +16,36 @@ describe("seen post store", () => {
     expect(await store.history("never-checked")).toBeUndefined();
   });
 
-  it("records the first check with the newest post's time as the baseline", async () => {
+  it("records the first check with the baseline given", async () => {
     const store = createSeenPostStore(database.db);
 
-    await store.recordFirstCheck("first-check", [
-      seenPost(1, "2026-09-24T12:00:00Z"),
-      seenPost(2, "2026-09-25T12:00:00Z"),
-    ]);
+    await store.recordFirstCheck(
+      "first-check",
+      [seenPost(1, "2026-09-24T12:00:00Z")],
+      new Date("2026-09-25T11:59:59.999Z"),
+    );
 
     expect(await store.history("first-check")).toStrictEqual({
-      baseline: new Date("2026-09-25T12:00:00Z"),
+      baseline: new Date("2026-09-25T11:59:59.999Z"),
     });
   });
 
   it("records the posts there at the first check as seen", async () => {
     const store = createSeenPostStore(database.db);
 
-    await store.recordFirstCheck("first-posts", [seenPost(1, "2026-09-24T12:00:00Z")]);
+    await store.recordFirstCheck(
+      "first-posts",
+      [seenPost(1, "2026-09-24T12:00:00Z")],
+      new Date("2026-09-24T12:00:00Z"),
+    );
 
     expect(await store.seenIds("first-posts", [1, 2])).toEqual(new Set([1]));
   });
 
-  it("counts a first check with no posts, with no baseline", async () => {
+  it("counts a first check with no posts and no baseline", async () => {
     const store = createSeenPostStore(database.db);
 
-    await store.recordFirstCheck("empty-first-check", []);
+    await store.recordFirstCheck("empty-first-check", [], undefined);
 
     expect(await store.history("empty-first-check")).toStrictEqual({ baseline: undefined });
   });

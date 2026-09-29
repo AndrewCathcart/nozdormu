@@ -8,8 +8,8 @@ export interface SeenPost {
 
 // What the news channel remembers about a staff-post feed it has checked.
 export interface FeedHistory {
-  // The newest post's time at the first check, if it had any posts. An unseen post no newer than
-  // this was already there (or has resurfaced after a newer one was deleted), so it isn't news.
+  // Set at the first check. An unseen post no newer than this was already there (or has
+  // resurfaced after a newer one was deleted), so it isn't news.
   readonly baseline: Date | undefined;
 }
 
@@ -17,8 +17,13 @@ export interface FeedHistory {
 export interface SeenPostStore {
   // Undefined if the feed has never been checked.
   readonly history: (feed: string) => Promise<FeedHistory | undefined>;
-  // Marks the feed as checked and records the posts already on it, in one transaction.
-  readonly recordFirstCheck: (feed: string, posts: readonly SeenPost[]) => Promise<void>;
+  // Marks the feed as checked with this baseline and records the posts already on it, in one
+  // transaction.
+  readonly recordFirstCheck: (
+    feed: string,
+    posts: readonly SeenPost[],
+    baseline: Date | undefined,
+  ) => Promise<void>;
   // Which of these posts the feed has seen.
   readonly seenIds: (feed: string, postIds: readonly number[]) => Promise<Set<number>>;
   readonly markSeen: (feed: string, postIds: readonly number[]) => Promise<void>;
@@ -45,11 +50,12 @@ export function createSeenPostStore(db: Database): SeenPostStore {
         .where(eq(bluePostFeeds.feed, feed));
       return row === undefined ? undefined : { baseline: row.baseline ?? undefined };
     },
-    recordFirstCheck: async (feed, posts) => {
+    recordFirstCheck: async (feed, posts, baseline) => {
       await db.transaction(async (tx) => {
-        const times = posts.map((post) => post.createdAt.getTime());
-        const baselineCreatedAt = times.length === 0 ? null : new Date(Math.max(...times));
-        await tx.insert(bluePostFeeds).values({ feed, baselineCreatedAt }).onConflictDoNothing();
+        await tx
+          .insert(bluePostFeeds)
+          .values({ feed, baselineCreatedAt: baseline ?? null })
+          .onConflictDoNothing();
         await insertPosts(
           tx,
           feed,

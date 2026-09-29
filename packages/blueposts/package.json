@@ -9,8 +9,10 @@
   "dependencies": {
     "@nozdormu/core": "workspace:*",
     "@nozdormu/db": "workspace:*",
-    "discord-api-types": "catalog:",
     "drizzle-orm": "catalog:",
     "zod": "catalog:"
+  },
+  "devDependencies": {
+    "discord-api-types": "catalog:"
   }
 }

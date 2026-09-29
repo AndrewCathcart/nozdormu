@@ -35,12 +35,19 @@ function byCreationTime(a: StaffPost, b: StaffPost): number {
 
 // How many of the Forever posts already on the forum the first check posts, so the news channel
 // starts with something in it.
-const postedAtFirstCheck = 3;
+const firstCheckPostCount = 3;
+
+// The newest post's time, if there are any.
+function newestTime(posts: readonly StaffPost[]): Date | undefined {
+  const times = posts.map((post) => post.createdAt.getTime());
+  return times.length === 0 ? undefined : new Date(Math.max(...times));
+}
 
 // Posts each new Blizzard staff forum post about Forever in the news channel. The first check
-// posts the latest few already there and records the rest without posting them. A post is recorded only after it's posted, so a
-// failed one is tried again at the next check; before posting, the bot looks for the post's link
-// among its own recent messages, so one posted just before a crash isn't repeated.
+// posts the latest few already there and records the rest without posting them. A post is
+// recorded only after it's posted, so a failed one is tried again at the next check; before
+// posting, the bot looks for the post's link among its own recent messages, so one posted just
+// before a crash isn't repeated.
 export function createBluePostsFeature(deps: BluePostsFeatureDeps): Feature {
   const { feed } = deps;
 
@@ -59,26 +66,29 @@ export function createBluePostsFeature(deps: BluePostsFeatureDeps): Feature {
     // after a newer post was deleted). Every later post gets posted and recorded, so it isn't new.
     let baseline: Date | undefined;
     if (history === undefined) {
-      // Everything older than the latest few Forever posts counts as already there. Those few are
-      // then new, and get posted below like any other.
-      const [oldestPosted] = posts
+      // Everything older than the latest few Forever posts counts as already there, and so does
+      // anything older that turns up later: the baseline is just before the oldest of the few.
+      // Those few are then new, and get posted below like any other.
+      const [oldestToPost] = posts
         .filter(isAboutForever)
         .toSorted(byCreationTime)
-        .slice(-postedAtFirstCheck);
+        .slice(-firstCheckPostCount);
       const alreadyThere =
-        oldestPosted === undefined
+        oldestToPost === undefined
           ? posts
-          : posts.filter((post) => post.createdAt < oldestPosted.createdAt);
-      await deps.seenPosts.recordFirstCheck(feed, alreadyThere);
+          : posts.filter((post) => post.createdAt < oldestToPost.createdAt);
+      baseline =
+        oldestToPost === undefined
+          ? newestTime(posts)
+          : new Date(oldestToPost.createdAt.getTime() - 1);
+      await deps.seenPosts.recordFirstCheck(feed, alreadyThere, baseline);
       deps.logger.info(
         { event: "blueposts.first_check", feed, posts: alreadyThere.length },
         "Recorded the older staff posts already on the forum without posting them",
       );
-      // What was just recorded, rather than read back from the store (which a dry run's doesn't
-      // keep), with the newest of it as the baseline, as the store takes it.
+      // What was just recorded, rather than read back from the store, which a dry run's doesn't
+      // keep.
       seen = new Set(alreadyThere.map((post) => post.id));
-      const times = alreadyThere.map((post) => post.createdAt.getTime());
-      baseline = times.length === 0 ? undefined : new Date(Math.max(...times));
     } else {
       seen = await deps.seenPosts.seenIds(
         feed,

@@ -265,15 +265,16 @@ importers:
       '@nozdormu/db':
         specifier: workspace:*
         version: link:../db
-      discord-api-types:
-        specifier: 'catalog:'
-        version: 0.38.55
       drizzle-orm:
         specifier: 'catalog:'
         version: 0.45.3(postgres@3.4.9)
       zod:
         specifier: 'catalog:'
         version: 4.6.5
+    devDependencies:
+      discord-api-types:
+        specifier: 'catalog:'
+        version: 0.38.55
 
   packages/core:
     dependencies:
