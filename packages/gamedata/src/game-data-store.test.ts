@@ -66,6 +66,23 @@ describe("game data store", () => {
     expect(await store.getRecipe(900_002)).toEqual(recipe(900_002, "Made-up Other Sword"));
   });
 
+  it("finds the recipes that make any of some items, with their reagents", async () => {
+    const store = createGameDataStore(database.db);
+    const bar: RecipeRecord = {
+      ...recipe(900_003, "Smelt Made-up Bar"),
+      result: { kind: "item", itemId: 3, count: 1 },
+      reagents: [{ itemId: 6, count: 2 }],
+    };
+    await importBuild(
+      store,
+      "1.60.1.1101",
+      [item(1, "Made-up Sword")],
+      [recipe(900_001, "Made-up Sword"), bar],
+    );
+
+    expect(await store.recipesMaking([3, 2])).toEqual([bar]);
+  });
+
   it("keeps an enchant, which makes no item", async () => {
     const store = createGameDataStore(database.db);
     const enchant: RecipeRecord = {
