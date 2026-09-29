@@ -33,7 +33,7 @@ function createDeps(reply: Response = json(200, drawn)) {
 }
 
 describe("createOpenAiIllustrator", () => {
-  it("returns the picture OpenAI painted, as a JPEG file", async () => {
+  it("returns the picture OpenAI drew, as a JPEG file", async () => {
     const deps = createDeps();
 
     const illustration = await createOpenAiIllustrator(deps)(scene);

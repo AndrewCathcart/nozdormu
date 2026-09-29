@@ -35,7 +35,14 @@ function parseDigest(text: string): Digest {
   if (!parsed.success) {
     throw new Error("Claude's digest didn't match the digest format.");
   }
-  return parsed.data;
+  const { sections, scene, caption } = parsed.data;
+  return {
+    sections,
+    cartoon:
+      scene.trim() === ""
+        ? undefined
+        : { scene: scene.trim(), caption: caption.trim() === "" ? undefined : caption.trim() },
+  };
 }
 
 // Writes each digest with one request to Claude Opus 5.5, streamed so a long request isn't cut off

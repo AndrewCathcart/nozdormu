@@ -94,7 +94,7 @@ describe("createClaudeWriter", () => {
     );
   });
 
-  it("returns the sections Claude wrote, and the scene and caption for the picture", async () => {
+  it("returns the sections Claude wrote, and the scene and caption for the cartoon", async () => {
     const { client } = createFakeClaude();
     const write = createClaudeWriter({ client, logger: createFakeLogger() });
 
@@ -105,9 +105,35 @@ describe("createClaudeWriter", () => {
         { heading: "Decided", body: "- Brannoc has made a spreadsheet." },
         { heading: "Highlights", body: "- Nothing yet." },
       ],
-      scene: "A dwarf warrior proudly unrolls an enormous spreadsheet across a tavern table.",
-      caption: "The week Brannoc made a spreadsheet.",
+      cartoon: {
+        scene: "A dwarf warrior proudly unrolls an enormous spreadsheet across a tavern table.",
+        caption: "The week Brannoc made a spreadsheet.",
+      },
     });
+  });
+
+  it("gives no cartoon when Claude describes no scene", async () => {
+    const { client } = createFakeClaude({
+      text: JSON.stringify({ sections: [], scene: " ", caption: "The week nothing happened." }),
+      stopReason: "end_turn",
+    });
+    const write = createClaudeWriter({ client, logger: createFakeLogger() });
+
+    const digest = await write(chat, week);
+
+    expect(digest.cartoon).toBeUndefined();
+  });
+
+  it("gives the cartoon no caption when Claude writes none", async () => {
+    const { client } = createFakeClaude({
+      text: JSON.stringify({ sections: [], scene: "A gnome waves.", caption: "" }),
+      stopReason: "end_turn",
+    });
+    const write = createClaudeWriter({ client, logger: createFakeLogger() });
+
+    const digest = await write(chat, week);
+
+    expect(digest.cartoon).toEqual({ scene: "A gnome waves.", caption: undefined });
   });
 
   it("asks Claude Opus 5.5, falling back to another model if it declines", async () => {

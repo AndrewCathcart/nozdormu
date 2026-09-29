@@ -28,7 +28,7 @@ The picture:
 - Show members as the characters they play or talk about, by race and class where the chat says so (such as "a dwarf warrior" or "a gnome mage"), never by name. Use plain fantasy words rather than the names of games, places, bosses or items.
 - The scene goes to a separate drawing service, so don't quote anyone in it or repeat their words.
 - Nothing sensitive, no real people, nothing gory, and no writing in the picture.
-- In "caption", write one short line to go under the picture saying which moment it shows, in the catch-up's plain voice, such as "The week the raptor ate the escort quest." Names are fine here.`;
+- In "caption", write one short line to go above the picture saying which moment it shows, in the catch-up's plain voice, such as "The week the raptor ate the escort quest." Names are fine here.`;
 
 // The week's chat, wrapped so it's clearly separate from the request.
 export function userPrompt(transcript: string, week: Week): string {

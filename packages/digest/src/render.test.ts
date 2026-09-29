@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { renderDigest } from "./render.ts";
+import { captionedMasthead, renderDigest } from "./render.ts";
 import { lastWeek } from "./test-chat.ts";
 
 // The masthead: "# 📰 This week in the guild" and the week's dates below it.
@@ -66,5 +66,19 @@ describe("renderDigest", () => {
     const messages = renderDigest(lastWeek, { sections: [{ heading: "L", body: words(50) }] });
 
     expect(messages).toEqual([masthead, `## L\n${words(19)}`, words(20), words(11)]);
+  });
+});
+
+describe("captionedMasthead", () => {
+  it("puts the cartoon's caption under the masthead in italics, with its markdown escaped", () => {
+    expect(captionedMasthead(masthead, "The week *everyone* wiped.")).toBe(
+      `${masthead}\n\n*The week \\*everyone\\* wiped.*`,
+    );
+  });
+
+  it("shortens a caption longer than 200 characters", () => {
+    expect(captionedMasthead(masthead, "a".repeat(300))).toBe(
+      `${masthead}\n\n*${"a".repeat(199)}…*`,
+    );
   });
 });

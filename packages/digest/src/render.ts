@@ -1,9 +1,21 @@
+import { escapeMarkdown } from "@nozdormu/core";
 import type { Week } from "./chat.ts";
 import type { Digest, Section } from "./digest.ts";
 import { weekDates } from "./uk-time.ts";
 
 // Discord's limit on a message's length.
 const maxMessageLength = 2000;
+
+// Far more than the one short line asked for, and short enough that the masthead and caption
+// always fit in one message.
+const maxCaptionLength = 200;
+
+// The masthead with the cartoon's caption under it, in italics. Discord shows the picture below.
+export function captionedMasthead(masthead: string, caption: string): string {
+  const shortened =
+    caption.length > maxCaptionLength ? `${caption.slice(0, maxCaptionLength - 1)}…` : caption;
+  return `${masthead}\n\n*${escapeMarkdown(shortened)}*`;
+}
 
 // Fills messages in order, starting a new one whenever the next piece of text won't fit.
 class MessagePacker {

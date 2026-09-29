@@ -11,7 +11,7 @@ export interface OpenAiIllustratorDeps {
 // The same style every week, around the scene Claude described: a newspaper cartoon, which reads
 // well at Discord's preview size, where a glossy painting looked generic. The model draws writing
 // badly, so the picture has none.
-function paintingPrompt(scene: string): string {
+function cartoonPrompt(scene: string): string {
   return `A single-panel newspaper cartoon about a fantasy adventuring guild: clean, confident ink lines, flat muted colours, expressive comic faces and poses, and a simple, uncluttered background, in the tradition of classic magazine cartoons. The scene: ${scene} No text, letters, speech bubbles, numbers, logos or watermarks anywhere.`;
 }
 
@@ -35,7 +35,7 @@ export function createOpenAiIllustrator(deps: OpenAiIllustratorDeps): Illustrato
       headers: { authorization: `Bearer ${deps.apiKey}`, "content-type": "application/json" },
       body: JSON.stringify({
         model,
-        prompt: paintingPrompt(scene),
+        prompt: cartoonPrompt(scene),
         size: "1536x1024",
         quality: "high",
         output_format: "jpeg",
@@ -52,7 +52,7 @@ export function createOpenAiIllustrator(deps: OpenAiIllustratorDeps): Illustrato
       throw new Error(`OpenAI answered HTTP ${String(response.status)}${code} instead of drawing.`);
     }
     const { data, usage } = drawing.parse(await response.json());
-    // Logged for every reply with a picture, since each is paid for.
+    // Logged for every reply OpenAI accepted, since each is paid for.
     deps.logger.info(
       {
         event: "digest.illustration_drawn",
