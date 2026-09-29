@@ -5,11 +5,15 @@ import {
   items,
   recipeReagents,
   recipes,
+  scannedItems,
+  scannedItemStats,
 } from "@nozdormu/db";
 import { and, asc, desc, eq, gt, ilike, inArray, min, or, sql } from "drizzle-orm";
 import type { ClassSpell } from "./class-spells.ts";
+import { type ItemEntry, itemEntry } from "./item-entry.ts";
 import type { ItemRecord } from "./item-sparse.ts";
 import type { Reagent, RecipeRecord, RecipeResult, SkillLevels } from "./recipes.ts";
+import type { ScannedItem } from "./scanned-item.ts";
 
 export interface ImportedBuild {
   readonly version: string;
@@ -35,6 +39,11 @@ export interface GameDataStore {
   readonly getItem: (id: number) => Promise<ItemRecord | undefined>;
   // Items whose name contains the text: names starting with it first, then shorter names.
   readonly searchItems: (text: string, limit: number) => Promise<ItemRecord[]>;
+  // Items whose name contains the text, in the client's table or as scanned in the game, each once:
+  // names starting with it first, then shorter names.
+  readonly findItems: (text: string, limit: number) => Promise<ItemEntry[]>;
+  // An item as scanned in the game where it has been, otherwise from the client's table.
+  readonly lookUpItem: (id: number) => Promise<ItemEntry | undefined>;
   // The names of those of these items that exist, by ID.
   readonly itemNames: (ids: readonly number[]) => Promise<Map<number, string>>;
   readonly getRecipe: (spellId: number) => Promise<RecipeRecord | undefined>;
@@ -97,7 +106,39 @@ function toRecipe(row: typeof recipes.$inferSelect, reagents: readonly Reagent[]
   };
 }
 
+// Whether a name starts with the text, ignoring case, for ordering search results.
+function startsWith(name: string, text: string): boolean {
+  return name.toLowerCase().startsWith(text.toLowerCase());
+}
+
 export function createGameDataStore(db: Database): GameDataStore {
+  // The scanned details of these items, by ID. The dungeon sync stores them.
+  const scannedById = async (ids: readonly number[]): Promise<Map<number, ScannedItem>> => {
+    if (ids.length === 0) {
+      return new Map();
+    }
+    const found = await db
+      .select()
+      .from(scannedItems)
+      .where(inArray(scannedItems.id, [...ids]));
+    const stats = await db
+      .select()
+      .from(scannedItemStats)
+      .where(inArray(scannedItemStats.itemId, [...ids]))
+      .orderBy(asc(scannedItemStats.position));
+    return new Map(
+      found.map((row) => [
+        row.id,
+        {
+          ...row,
+          stats: stats
+            .filter((stat) => stat.itemId === row.id)
+            .map(({ stat, value }) => ({ stat, value })),
+        },
+      ]),
+    );
+  };
+
   return {
     importedBuild: async () => {
       const [build] = await db
@@ -178,6 +219,51 @@ export function createGameDataStore(db: Database): GameDataStore {
           asc(items.name),
         )
         .limit(limit);
+    },
+    findItems: async (text, limit) => {
+      const escaped = escapeLike(text);
+      // Each source's best matches, in the order below, so the limit can't cut them.
+      const clientRows = await db
+        .select()
+        .from(items)
+        .where(and(ilike(items.name, `%${escaped}%`), sql`${items.name} !~* ${unusedName}`))
+        .orderBy(
+          sql`case when ${items.name} ilike ${`${escaped}%`} then 0 else 1 end`,
+          sql`length(${items.name})`,
+          asc(items.name),
+        )
+        .limit(limit);
+      const scannedRows = await db
+        .select({ id: scannedItems.id })
+        .from(scannedItems)
+        .where(
+          and(
+            ilike(scannedItems.name, `%${escaped}%`),
+            sql`${scannedItems.name} !~* ${unusedName}`,
+          ),
+        )
+        .orderBy(
+          sql`case when ${scannedItems.name} ilike ${`${escaped}%`} then 0 else 1 end`,
+          sql`length(${scannedItems.name})`,
+          asc(scannedItems.name),
+        )
+        .limit(limit);
+      const clientById = new Map(clientRows.map((row) => [row.id, row]));
+      const ids = [...new Set([...clientById.keys(), ...scannedRows.map((row) => row.id)])];
+      const scanned = await scannedById(ids);
+      return ids
+        .flatMap((id) => itemEntry(clientById.get(id), scanned.get(id)) ?? [])
+        .toSorted(
+          (a, b) =>
+            Number(startsWith(b.name, text)) - Number(startsWith(a.name, text)) ||
+            a.name.length - b.name.length ||
+            a.name.localeCompare(b.name),
+        )
+        .slice(0, limit);
+    },
+    lookUpItem: async (id) => {
+      const [client] = await db.select().from(items).where(eq(items.id, id));
+      return itemEntry(client, (await scannedById([id])).get(id));
     },
     itemNames: async (ids) => {
       const found = await db
