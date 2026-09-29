@@ -1,23 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { parseRecipes, type RecipeTable } from "./recipes.ts";
-
-function csv(rows: readonly (readonly (number | string)[])[]): string {
-  return rows.map((row) => row.join(",")).join("\n");
-}
-
-const reagentHeader = [
-  "ID",
-  "SpellID",
-  ...Array.from({ length: 8 }, (_, index) => `Reagent_${String(index)}`),
-  ...Array.from({ length: 8 }, (_, index) => `ReagentCount_${String(index)}`),
-];
-
-// One SpellReagents row: up to 8 reagents, padded with zeros like the real table.
-function reagentRow(id: number, spellId: number, reagents: readonly [number, number][]) {
-  const items = Array.from({ length: 8 }, (_, index) => reagents[index]?.[0] ?? 0);
-  const counts = Array.from({ length: 8 }, (_, index) => reagents[index]?.[1] ?? 0);
-  return [id, spellId, ...items, ...counts];
-}
+import {
+  csv,
+  reagentHeader,
+  reagentRow,
+  skillLineAbilityHeader,
+  spellEffectHeader,
+} from "./test-tables.ts";
 
 // Made-up tables holding one Blacksmithing recipe, in wago.tools' format (unused columns left out).
 function tables(overrides: Partial<Record<RecipeTable, string>> = {}): Record<RecipeTable, string> {
@@ -26,18 +15,12 @@ function tables(overrides: Partial<Record<RecipeTable, string>> = {}): Record<Re
       ["ID", "DisplayName_lang", "CategoryID"],
       [164, "Blacksmithing", 11],
     ]),
-    SkillLineAbility: csv([
-      ["ID", "SkillLine", "Spell", "TrivialSkillLineRankLow", "TrivialSkillLineRankHigh"],
-      [1, 164, 900_001, 50, 100],
-    ]),
+    SkillLineAbility: csv([skillLineAbilityHeader, [1, 164, 900_001, 50, 100]]),
     SpellName: csv([
       ["ID", "Name_lang"],
       [900_001, "Made-up Sword of Testing"],
     ]),
-    SpellEffect: csv([
-      ["ID", "SpellID", "Effect", "EffectItemType", "EffectBasePointsF"],
-      [1, 900_001, 24, 270_001, 1],
-    ]),
+    SpellEffect: csv([spellEffectHeader, [1, 900_001, 24, 270_001, 1]]),
     SpellReagents: csv([
       reagentHeader,
       reagentRow(1, 900_001, [
@@ -75,10 +58,7 @@ describe("parseRecipes", () => {
   it("counts a recipe that makes 0 items as making 1", () => {
     const recipes = parseRecipes(
       tables({
-        SpellEffect: csv([
-          ["ID", "SpellID", "Effect", "EffectItemType", "EffectBasePointsF"],
-          [1, 900_001, 24, 270_001, 0],
-        ]),
+        SpellEffect: csv([spellEffectHeader, [1, 900_001, 24, 270_001, 0]]),
       }),
     );
 
@@ -88,11 +68,7 @@ describe("parseRecipes", () => {
   it("takes the item from the effect that makes it, ignoring the spell's other effects", () => {
     const recipes = parseRecipes(
       tables({
-        SpellEffect: csv([
-          ["ID", "SpellID", "Effect", "EffectItemType", "EffectBasePointsF"],
-          [1, 900_001, 24, 270_001, 1],
-          [2, 900_001, 6, 0, 0],
-        ]),
+        SpellEffect: csv([spellEffectHeader, [1, 900_001, 24, 270_001, 1], [2, 900_001, 6, 0, 0]]),
       }),
     );
 
@@ -146,7 +122,7 @@ describe("parseRecipes", () => {
           [165, "Leatherworking", 11],
         ]),
         SkillLineAbility: csv([
-          ["ID", "SkillLine", "Spell", "TrivialSkillLineRankLow", "TrivialSkillLineRankHigh"],
+          skillLineAbilityHeader,
           [1, 164, 900_001, 50, 100],
           [2, 165, 900_001, 50, 100],
           [3, 164, 900_001, 50, 100],

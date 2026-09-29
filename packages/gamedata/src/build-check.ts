@@ -1,9 +1,10 @@
 import type { Logger, ScheduledJob } from "@nozdormu/core";
+import type { GameBuild, GameDataStore } from "./game-data-store.ts";
 import { parseItemSparse } from "./item-sparse.ts";
-import type { GameDataStore } from "./game-data-store.ts";
+import { parseRecipes, type RecipeTable } from "./recipes.ts";
 
 // The client tables we import.
-export type GameTable = "ItemSparse";
+export type GameTable = "ItemSparse" | RecipeTable;
 
 // Where the game data comes from: wago.tools in production.
 export interface GameDataSource {
@@ -19,8 +20,10 @@ export interface BuildCheckDeps {
   readonly logger: Pick<Logger, "info">;
 }
 
-// A download with fewer items than this is treated as a failed one. Forever has about 19,000.
+// A build with fewer items or recipes than this is treated as a failed download. Forever has about
+// 19,000 items and 2,300 recipes.
 const minimumItems = 1000;
+const minimumRecipes = 1000;
 
 // Forever's client builds are 1.60 and up. The product we follow has carried other games' betas
 // before, so anything else is skipped.
@@ -29,8 +32,30 @@ function isForeverBuild(version: string): boolean {
   return minor !== undefined && Number.parseInt(minor, 10) >= 60;
 }
 
-// Hourly: when a new Forever build appears, imports its items, replacing the previous build's. A
-// failed import leaves the previous build in place, and the next check tries again.
+// Downloads a build's tables one at a time, to go easy on wago.tools, and reads them.
+async function download(source: GameDataSource, version: string): Promise<GameBuild> {
+  const table = (name: GameTable): Promise<string> => source.table(name, version);
+  const items = parseItemSparse(await table("ItemSparse"));
+  const recipes = parseRecipes({
+    SkillLine: await table("SkillLine"),
+    SkillLineAbility: await table("SkillLineAbility"),
+    SpellName: await table("SpellName"),
+    SpellEffect: await table("SpellEffect"),
+    SpellReagents: await table("SpellReagents"),
+    ItemEffect: await table("ItemEffect"),
+    ItemXItemEffect: await table("ItemXItemEffect"),
+  });
+  return { version, items, recipes };
+}
+
+function tooFew(count: number, what: string, version: string): Error {
+  return new Error(
+    `wago.tools gave only ${String(count)} ${what} for build ${version}, so the stored game data was kept.`,
+  );
+}
+
+// Hourly: when a new Forever build appears, imports its items and recipes, replacing the previous
+// build's. A failed import leaves the previous build in place, and the next check tries again.
 export function createBuildCheckJob(deps: BuildCheckDeps): ScheduledJob {
   const run = async (): Promise<void> => {
     const latest = await deps.source.latestBuild();
@@ -46,18 +71,20 @@ export function createBuildCheckJob(deps: BuildCheckDeps): ScheduledJob {
       return;
     }
     const startedAt = performance.now();
-    const records = parseItemSparse(await deps.source.table("ItemSparse", latest));
-    if (records.length < minimumItems) {
-      throw new Error(
-        `wago.tools gave only ${String(records.length)} items for build ${latest}, so the stored items were kept.`,
-      );
+    const build = await download(deps.source, latest);
+    if (build.items.length < minimumItems) {
+      throw tooFew(build.items.length, "items", latest);
     }
-    await deps.store.replaceBuild({ version: latest, items: records, recipes: [] });
+    if (build.recipes.length < minimumRecipes) {
+      throw tooFew(build.recipes.length, "recipes", latest);
+    }
+    await deps.store.replaceBuild(build);
     deps.logger.info(
       {
         event: "gamedata.imported",
         version: latest,
-        items: records.length,
+        items: build.items.length,
+        recipes: build.recipes.length,
         durationMs: Math.round(performance.now() - startedAt),
       },
       "Imported a new game build",
