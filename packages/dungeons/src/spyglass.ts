@@ -34,6 +34,9 @@ export interface ScannedItem {
   readonly quality: number;
   readonly itemLevel: number;
   readonly requiredLevel: number;
+  // The game's IDs for what kind of item it is, such as 4 (armour) and 2 (leather).
+  readonly itemClass: number;
+  readonly itemSubclass: number;
   // The game's name for where it's worn, such as "INVTYPE_NECK".
   readonly slot: string;
   readonly stats: readonly ItemStat[];
@@ -85,6 +88,8 @@ const itemFile = z.record(
     quality: z.int(),
     itemLevel: z.int(),
     reqLevel: z.int(),
+    classID: z.int(),
+    subclassID: z.int(),
     slot: z.string(),
     stats: z.record(z.string(), z.number()).optional(),
   }),
@@ -145,6 +150,8 @@ export function createSpyglassReader(options: SpyglassReaderOptions): SpyglassRe
           quality: item.quality,
           itemLevel: item.itemLevel,
           requiredLevel: item.reqLevel,
+          itemClass: item.classID,
+          itemSubclass: item.subclassID,
           slot: item.slot,
           stats: Object.entries(item.stats ?? {}).map(([stat, value]) => ({ stat, value })),
         });

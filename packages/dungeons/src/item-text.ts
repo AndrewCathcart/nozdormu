@@ -30,6 +30,63 @@ const slots: ReadonlyMap<string, string> = new Map([
   ["INVTYPE_BAG", "Bag"],
 ]);
 
+// The game's item class for armour, and its subclasses for the kinds that limit who can wear it.
+const armour = 4;
+const armourKinds: ReadonlyMap<number, string> = new Map([
+  [1, "Cloth"],
+  [2, "Leather"],
+  [3, "Mail"],
+  [4, "Plate"],
+]);
+
+// The game's item class for weapons, and its subclasses. Two-handed axes, maces and swords have
+// their own subclasses, but the slot already says they're two-handed.
+const weapon = 2;
+const weaponKinds: ReadonlyMap<number, string> = new Map([
+  [0, "Axe"],
+  [1, "Axe"],
+  [2, "Bow"],
+  [3, "Gun"],
+  [4, "Mace"],
+  [5, "Mace"],
+  [6, "Polearm"],
+  [7, "Sword"],
+  [8, "Sword"],
+  [10, "Staff"],
+  [13, "Fist Weapon"],
+  [15, "Dagger"],
+  [16, "Thrown"],
+  [17, "Spear"],
+  [18, "Crossbow"],
+  [19, "Wand"],
+  [20, "Fishing Pole"],
+]);
+
+// Slots whose name says less than the kind of weapon in them.
+const rangedSlots: ReadonlySet<string> = new Set([
+  "INVTYPE_RANGED",
+  "INVTYPE_RANGEDRIGHT",
+  "INVTYPE_THROWN",
+]);
+
+// Where an item is worn and what kind it is, such as "Leather Waist", "One-Hand Dagger" or "Bow".
+// Cloaks are all cloth, so the game doesn't say so, and nor does this.
+function kindText(item: ScannedItem): string | undefined {
+  const slot = slots.get(item.slot);
+  if (item.itemClass === weapon) {
+    const kind = weaponKinds.get(item.itemSubclass);
+    if (kind === undefined || slot === undefined) {
+      return kind ?? slot;
+    }
+    return rangedSlots.has(item.slot) ? kind : `${slot} ${kind}`;
+  }
+  const kind = item.itemClass === armour ? armourKinds.get(item.itemSubclass) : undefined;
+  if (slot === undefined || kind === undefined || item.slot === "INVTYPE_CLOAK") {
+    return slot;
+  }
+  return `${kind} ${slot}`;
+}
+
 // Short names players use for the main stats, and plain names for the others the game's names
 // don't spell out. Any other stat is named from the game's name ("ATTACK_POWER_VS_BEAST" becomes
 // "Attack Power Vs Beast").
@@ -78,9 +135,29 @@ function statText({ stat, value }: ItemStat): string {
   return `+${number(value)} ${statNames.get(stat) ?? titleCase(stat)}`;
 }
 
-// An item's slot and stats, such as "Neck · +4 Sta, +2 Spi", leaving out what it doesn't have.
+// The order the game's tooltip shows stats in: damage per second or armour, then the main stats.
+// Others follow in the order they came.
+const statOrder: readonly string[] = [
+  "DAMAGE_PER_SECOND",
+  "RESISTANCE0_NAME",
+  "STRENGTH",
+  "AGILITY",
+  "STAMINA",
+  "INTELLECT",
+  "SPIRIT",
+];
+
+function statRank({ stat }: ItemStat): number {
+  const rank = statOrder.indexOf(stat);
+  return rank === -1 ? statOrder.length : rank;
+}
+
+// An item's slot, kind and stats, such as "Leather Waist · +4 Sta, +2 Spi", leaving out what it
+// doesn't have.
 export function itemDetails(item: ScannedItem): string {
-  const slot = slots.get(item.slot);
-  const stats = item.stats.map(statText).join(", ");
-  return [slot, stats].filter((part) => part !== undefined && part !== "").join(" · ");
+  const stats = item.stats
+    .toSorted((a, b) => statRank(a) - statRank(b))
+    .map(statText)
+    .join(", ");
+  return [kindText(item), stats].filter((part) => part !== undefined && part !== "").join(" · ");
 }

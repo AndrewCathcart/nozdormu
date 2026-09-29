@@ -104,7 +104,7 @@ describe("createSpyglassReader", () => {
     });
   });
 
-  it("reads the items it has scanned, with their stats", async () => {
+  it("reads the items it has scanned, with their kind and stats", async () => {
     const fetch = createFakeFetch({
       "items/items_280000.json": {
         "280101": {
@@ -138,6 +138,8 @@ describe("createSpyglassReader", () => {
         quality: 3,
         itemLevel: 18,
         requiredLevel: 13,
+        itemClass: 4,
+        itemSubclass: 0,
         slot: "INVTYPE_NECK",
         stats: [
           { stat: "STAMINA", value: 4 },
@@ -150,6 +152,8 @@ describe("createSpyglassReader", () => {
         quality: 0,
         itemLevel: 1,
         requiredLevel: 0,
+        itemClass: 15,
+        itemSubclass: 0,
         slot: "INVTYPE_NON_EQUIP_IGNORE",
         stats: [],
       },

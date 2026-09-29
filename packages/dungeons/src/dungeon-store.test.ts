@@ -98,6 +98,8 @@ describe("dungeon store", () => {
       quality: 3,
       itemLevel: 18,
       requiredLevel: 13,
+      itemClass: 4,
+      itemSubclass: 0,
       slot: "INVTYPE_NECK",
       stats: [
         { stat: "STAMINA", value: 4 },

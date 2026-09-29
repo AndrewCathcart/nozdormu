@@ -3,6 +3,7 @@ import { type APIEmbed, MessageFlags } from "discord-api-types/v10";
 import { describe, expect, it, vi } from "vitest";
 import { createDungeonCommand } from "./dungeon-command.ts";
 import type { DungeonStore, StoredDungeon, StoredLootItem } from "./dungeon-store.ts";
+import type { ScannedItem } from "./spyglass.ts";
 
 const hollow: StoredDungeon = {
   name: "The Made-up Hollow",
@@ -22,6 +23,8 @@ const hollow: StoredDungeon = {
             quality: 3,
             itemLevel: 18,
             requiredLevel: 13,
+            itemClass: 4,
+            itemSubclass: 0,
             slot: "INVTYPE_NECK",
             stats: [
               { stat: "STAMINA", value: 4 },
@@ -74,6 +77,29 @@ function cardLength(embed: APIEmbed): number {
   ].reduce((total, text) => total + (text ?? "").length, 0);
 }
 
+// A made-up scanned item of this kind, worn in this slot, with these stats.
+function scannedLoot(
+  itemId: number,
+  name: string,
+  kind: { itemClass: number; itemSubclass: number; slot: string },
+  stats: ScannedItem["stats"] = [],
+): StoredLootItem {
+  return {
+    itemId,
+    name,
+    scanned: { id: itemId, name, quality: 3, itemLevel: 18, requiredLevel: 13, ...kind, stats },
+  };
+}
+
+// A reply's first boss's loot lines, for the dungeon holding only this loot.
+async function lootShown(loot: readonly StoredLootItem[]): Promise<string | undefined> {
+  const command = createDungeonCommand(
+    createFakeStore([{ ...hollow, bosses: [{ name: "Made-up Warden", loot }] }]),
+  );
+  const reply = await command.handle(invoke("The Made-up Hollow"));
+  return card(reply).fields?.[0]?.value;
+}
+
 function invoke(name: string) {
   return { commandName: "dungeon", options: new Map([["name", name]]) };
 }
@@ -109,7 +135,7 @@ describe("/dungeon", () => {
     });
   });
 
-  it("shows armour, damage per second and other stats readably", async () => {
+  it("shows damage per second, armour and other stats readably", async () => {
     const stave: StoredLootItem = {
       itemId: 280_103,
       name: "Made-up Stave",
@@ -119,10 +145,12 @@ describe("/dungeon", () => {
         quality: 3,
         itemLevel: 18,
         requiredLevel: 13,
+        itemClass: 2,
+        itemSubclass: 10,
         slot: "INVTYPE_2HWEAPON",
         stats: [
-          { stat: "RESISTANCE0_NAME", value: 100 },
           { stat: "DAMAGE_PER_SECOND", value: 11.88 },
+          { stat: "RESISTANCE0_NAME", value: 100 },
           { stat: "SPELL_POWER", value: 18 },
           { stat: "ATTACK_POWER_VS_BEAST", value: 3 },
         ],
@@ -135,7 +163,81 @@ describe("/dungeon", () => {
     const reply = await command.handle(invoke("The Made-up Hollow"));
 
     expect(card(reply).fields?.[0]?.value).toBe(
-      "[Made-up Stave](https://www.wowhead.com/forever/item=280103) · Two-Hand · 100 Armor, 11.9 DPS, +18 Spell Power, +3 Attack Power Vs Beast",
+      "[Made-up Stave](https://www.wowhead.com/forever/item=280103) · Two-Hand Staff · 11.9 DPS, 100 Armor, +18 Spell Power, +3 Attack Power Vs Beast",
+    );
+  });
+
+  it("lists damage per second or armour first, then the main stats in the game's order", async () => {
+    const bracers = scannedLoot(
+      280_110,
+      "Made-up Bracers",
+      { itemClass: 4, itemSubclass: 2, slot: "INVTYPE_WRIST" },
+      [
+        { stat: "AGILITY", value: 4 },
+        { stat: "INTELLECT", value: 3 },
+        { stat: "RESISTANCE0_NAME", value: 37 },
+        { stat: "SPELL_POWER", value: 6 },
+        { stat: "SPIRIT", value: 2 },
+        { stat: "STAMINA", value: 5 },
+        { stat: "STRENGTH", value: 1 },
+      ],
+    );
+
+    expect(await lootShown([bracers])).toBe(
+      "[Made-up Bracers](https://www.wowhead.com/forever/item=280110) · Leather Wrist · 37 Armor, +1 Str, +4 Agi, +5 Sta, +3 Int, +2 Spi, +6 Spell Power",
+    );
+  });
+
+  it("names the kind of armour a piece is, except for cloaks, which are all cloth", async () => {
+    const girdle = scannedLoot(
+      280_104,
+      "Made-up Girdle",
+      { itemClass: 4, itemSubclass: 2, slot: "INVTYPE_WAIST" },
+      [{ stat: "STAMINA", value: 4 }],
+    );
+    const cloak = scannedLoot(280_105, "Made-up Cloak", {
+      itemClass: 4,
+      itemSubclass: 1,
+      slot: "INVTYPE_CLOAK",
+    });
+
+    expect(await lootShown([girdle, cloak])).toBe(
+      [
+        "[Made-up Girdle](https://www.wowhead.com/forever/item=280104) · Leather Waist · +4 Sta",
+        "[Made-up Cloak](https://www.wowhead.com/forever/item=280105) · Back",
+      ].join("\n"),
+    );
+  });
+
+  it("names the kind of weapon, with only the kind for a ranged one", async () => {
+    const staff = scannedLoot(280_106, "Made-up Staff", {
+      itemClass: 2,
+      itemSubclass: 10,
+      slot: "INVTYPE_2HWEAPON",
+    });
+    const axe = scannedLoot(280_107, "Made-up Axe", {
+      itemClass: 2,
+      itemSubclass: 1,
+      slot: "INVTYPE_2HWEAPON",
+    });
+    const dagger = scannedLoot(280_108, "Made-up Dagger", {
+      itemClass: 2,
+      itemSubclass: 15,
+      slot: "INVTYPE_WEAPON",
+    });
+    const bow = scannedLoot(280_109, "Made-up Bow", {
+      itemClass: 2,
+      itemSubclass: 2,
+      slot: "INVTYPE_RANGED",
+    });
+
+    expect(await lootShown([staff, axe, dagger, bow])).toBe(
+      [
+        "[Made-up Staff](https://www.wowhead.com/forever/item=280106) · Two-Hand Staff",
+        "[Made-up Axe](https://www.wowhead.com/forever/item=280107) · Two-Hand Axe",
+        "[Made-up Dagger](https://www.wowhead.com/forever/item=280108) · One-Hand Dagger",
+        "[Made-up Bow](https://www.wowhead.com/forever/item=280109) · Bow",
+      ].join("\n"),
     );
   });
 

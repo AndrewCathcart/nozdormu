@@ -23,6 +23,8 @@ function items(count: number): ScannedItem[] {
     quality: 2,
     itemLevel: 20,
     requiredLevel: 15,
+    itemClass: 4,
+    itemSubclass: 1,
     slot: "INVTYPE_CHEST",
     stats: [],
   }));

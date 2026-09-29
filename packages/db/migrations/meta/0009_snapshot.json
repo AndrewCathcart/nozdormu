@@ -1,5 +1,5 @@
 {
-  "id": "70ce4490-51c5-41e9-9c29-cabd46f9f847",
+  "id": "756997f4-f7a1-422e-aa89-b77db3590de8",
   "prevId": "d9761b24-e202-4c64-9b4f-f74a15c039ec",
   "version": "7",
   "dialect": "postgresql",
@@ -641,6 +641,18 @@
         },
         "required_level": {
           "name": "required_level",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "item_class": {
+          "name": "item_class",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "item_subclass": {
+          "name": "item_subclass",
           "type": "integer",
           "primaryKey": false,
           "notNull": true

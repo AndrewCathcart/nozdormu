@@ -83,6 +83,8 @@ export function createDungeonStore(db: Database): DungeonStore {
               quality: item.quality,
               itemLevel: item.itemLevel,
               requiredLevel: item.requiredLevel,
+              itemClass: item.itemClass,
+              itemSubclass: item.itemSubclass,
               slot: item.slot,
             })),
           ),

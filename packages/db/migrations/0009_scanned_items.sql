@@ -12,6 +12,8 @@ CREATE TABLE "scanned_items" (
 	"quality" integer NOT NULL,
 	"item_level" integer NOT NULL,
 	"required_level" integer NOT NULL,
+	"item_class" integer NOT NULL,
+	"item_subclass" integer NOT NULL,
 	"slot" text NOT NULL
 );
 --> statement-breakpoint
