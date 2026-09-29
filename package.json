@@ -6,6 +6,8 @@
     "dev": "pnpm --filter @nozdormu/bot dev",
     "start": "pnpm --filter @nozdormu/bot start",
     "smoke": "pnpm --filter @nozdormu/bot smoke",
+    "db:generate": "pnpm --filter @nozdormu/db generate",
+    "db:migrate": "pnpm --filter @nozdormu/bot migrate",
     "prepare": "lefthook install",
     "check": "pnpm fmt:check && pnpm lint && pnpm typecheck && pnpm test",
     "fmt": "oxfmt",
