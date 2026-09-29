@@ -7,6 +7,7 @@ import { writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { SeenPostStore } from "@nozdormu/blueposts";
+import type { PostedReminderStore, ScheduledEvents } from "@nozdormu/calendar";
 import { type ChannelMessage, createLogger } from "@nozdormu/core";
 import type { DungeonStore } from "@nozdormu/dungeons";
 import type { GameDataStore } from "@nozdormu/gamedata";
@@ -101,6 +102,28 @@ function readOnlyDungeons(store: DungeonStore): DungeonStore {
   };
 }
 
+function readOnlyPostedReminders(store: PostedReminderStore): PostedReminderStore {
+  return {
+    postedKeys: store.postedKeys,
+    markPosted: (key) => {
+      logger.info({ event: "dry_run.reminder", key }, "Would record the reminder as posted");
+      return Promise.resolve();
+    },
+  };
+}
+
+function readOnlyScheduledEvents(events: ScheduledEvents): ScheduledEvents {
+  return {
+    names: events.names,
+    create: (event) => {
+      console.log(
+        `\nDRY RUN: would create the Discord Event "${event.name}" at ${event.startsAt.toISOString()}\n`,
+      );
+      return Promise.resolve();
+    },
+  };
+}
+
 function dryRun(deps: FeatureDeps): FeatureDeps {
   return {
     ...deps,
@@ -108,6 +131,8 @@ function dryRun(deps: FeatureDeps): FeatureDeps {
     gameDataStore: readOnlyGameData(deps.gameDataStore),
     seenStaffPosts: readOnlySeenStaffPosts(deps.seenStaffPosts),
     dungeonStore: readOnlyDungeons(deps.dungeonStore),
+    postedReminders: readOnlyPostedReminders(deps.postedReminders),
+    scheduledEvents: readOnlyScheduledEvents(deps.scheduledEvents),
     publish: (channelId, message, files = []) => {
       console.log(`\nDRY RUN: would post in channel ${channelId}:\n${asText(message)}\n`);
       for (const { name, data } of files) {
