@@ -8,7 +8,7 @@ describe("/ping", () => {
     );
     assert(ping, "The ping feature should define a /ping command.");
 
-    const reply = await ping.handle({ commandName: "ping" });
+    const reply = await ping.handle({ commandName: "ping", options: new Map() });
 
     expect(reply).toEqual({ content: "Pong!" });
   });

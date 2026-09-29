@@ -164,6 +164,9 @@ settings:
 
 catalogs:
   default:
+    csv-parse:
+      specifier: 7.0.3
+      version: 7.0.3
     discord-api-types:
       specifier: 0.38.55
       version: 0.38.55
@@ -223,6 +226,9 @@ importers:
       '@nozdormu/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@nozdormu/gamedata':
+        specifier: workspace:*
+        version: link:../../packages/gamedata
       '@nozdormu/ping':
         specifier: workspace:*
         version: link:../../packages/ping
@@ -273,6 +279,27 @@ importers:
       drizzle-kit:
         specifier: 0.31.11
         version: 0.31.11
+
+  packages/gamedata:
+    dependencies:
+      '@nozdormu/core':
+        specifier: workspace:*
+        version: link:../core
+      '@nozdormu/db':
+        specifier: workspace:*
+        version: link:../db
+      csv-parse:
+        specifier: 'catalog:'
+        version: 7.0.3
+      discord-api-types:
+        specifier: 'catalog:'
+        version: 0.38.55
+      drizzle-orm:
+        specifier: 'catalog:'
+        version: 0.45.3(postgres@3.4.9)
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.5
 
   packages/ping:
     dependencies:
@@ -1357,6 +1384,9 @@ packages:
   chai@6.2.2:
     resolution: {integrity: sha512-NUPRluOfOiTKBKvWPtSD4PhFvWCqOi0BGStNWs57X9js7XGTprSmFoz5F0tWhR4WPjNeR9jXqdC7/UpSJTnlRg==}
     engines: {node: '>=18'}
+
+  csv-parse@7.0.3:
+    resolution: {integrity: sha512-YFd3QM/yo17vH91L1IOZuvl09zM0zEEtdfTcOCKWcMdM++MNaQSyp09slXyFCLaPXvHstQFx/xC8myiFHSMUvw==}
 
   detect-libc@2.1.2:
     resolution: {integrity: sha512-Btj2BOOO83o3WyH59e8MgXsxEQVcarkUOpEYrubB0urwnN10yQ364rsiByU11nZlqWYZm05i/of7io4mzihBtQ==}
@@ -2654,6 +2684,8 @@ snapshots:
   buffer-from@1.1.2: {}
 
   chai@6.2.2: {}
+
+  csv-parse@7.0.3: {}
 
   detect-libc@2.1.2: {}
 
