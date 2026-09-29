@@ -2,20 +2,33 @@ import {
   type Database,
   dungeonBosses,
   dungeonLoot,
+  dungeonQuestRewards,
+  dungeonQuests,
   dungeons,
   scannedItems,
   scannedItemStats,
 } from "@nozdormu/db";
 import { asc, eq, inArray } from "drizzle-orm";
-import type { Dungeon, LootItem, ScannedItem, SpyglassData } from "./spyglass.ts";
+import type { Dungeon, Faction, LootItem, Quest, ScannedItem, SpyglassData } from "./spyglass.ts";
 
 // A loot item, with its scanned details where Spyglass has scanned it.
 export interface StoredLootItem extends LootItem {
   readonly scanned: ScannedItem | undefined;
 }
 
-export interface StoredDungeon extends Omit<Dungeon, "bosses"> {
+export interface StoredQuest extends Omit<Quest, "rewards"> {
+  readonly rewards: readonly StoredLootItem[];
+}
+
+export interface StoredDungeon extends Omit<Dungeon, "bosses" | "quests"> {
   readonly bosses: readonly { readonly name: string; readonly loot: readonly StoredLootItem[] }[];
+  readonly quests: readonly StoredQuest[];
+}
+
+const factions: ReadonlySet<string> = new Set(["Alliance", "Horde", "Both"] satisfies Faction[]);
+
+function isFaction(side: string): side is Faction {
+  return factions.has(side);
 }
 
 export type DungeonSummary = Pick<Dungeon, "name" | "minLevel" | "maxLevel">;
@@ -133,6 +146,36 @@ export function createDungeonStore(db: Database): DungeonStore {
           ),
           (batch) => tx.insert(dungeonLoot).values(batch),
         );
+        const quests = syncedDungeons.flatMap((dungeon) =>
+          dungeon.quests.map((quest, position) => ({ dungeon: dungeon.name, position, quest })),
+        );
+        await insertInBatches(quests, (batch) =>
+          tx.insert(dungeonQuests).values(
+            batch.map(({ dungeon, position, quest }) => ({
+              dungeon,
+              position,
+              questId: quest.id,
+              name: quest.name,
+              side: quest.side ?? null,
+              className: quest.className ?? null,
+              requiredLevel: quest.requiredLevel ?? null,
+              xp: quest.xp ?? null,
+              objective: quest.objective ?? null,
+            })),
+          ),
+        );
+        await insertInBatches(
+          quests.flatMap(({ dungeon, position: questPosition, quest }) =>
+            quest.rewards.map((item, position) => ({
+              dungeon,
+              questPosition,
+              position,
+              itemId: item.itemId,
+              itemName: item.name,
+            })),
+          ),
+          (batch) => tx.insert(dungeonQuestRewards).values(batch),
+        );
       });
     },
     get: async (name) => {
@@ -154,7 +197,23 @@ export function createDungeonStore(db: Database): DungeonStore {
         .from(dungeonLoot)
         .where(eq(dungeonLoot.dungeon, name))
         .orderBy(asc(dungeonLoot.bossPosition), asc(dungeonLoot.position));
-      const scanned = await scannedById([...new Set(loot.map((item) => item.itemId))]);
+      const quests = await db
+        .select()
+        .from(dungeonQuests)
+        .where(eq(dungeonQuests.dungeon, name))
+        .orderBy(asc(dungeonQuests.position));
+      const rewards = await db
+        .select({
+          questPosition: dungeonQuestRewards.questPosition,
+          itemId: dungeonQuestRewards.itemId,
+          name: dungeonQuestRewards.itemName,
+        })
+        .from(dungeonQuestRewards)
+        .where(eq(dungeonQuestRewards.dungeon, name))
+        .orderBy(asc(dungeonQuestRewards.questPosition), asc(dungeonQuestRewards.position));
+      const scanned = await scannedById([
+        ...new Set([...loot, ...rewards].map((item) => item.itemId)),
+      ]);
       return {
         name: found.name,
         minLevel: found.minLevel,
@@ -164,6 +223,22 @@ export function createDungeonStore(db: Database): DungeonStore {
           name: boss.name,
           loot: loot
             .filter((item) => item.bossPosition === boss.position)
+            .map(({ itemId, name: itemName }) => ({
+              itemId,
+              name: itemName,
+              scanned: scanned.get(itemId),
+            })),
+        })),
+        quests: quests.map((quest) => ({
+          id: quest.questId,
+          name: quest.name,
+          side: quest.side !== null && isFaction(quest.side) ? quest.side : undefined,
+          className: quest.className ?? undefined,
+          requiredLevel: quest.requiredLevel ?? undefined,
+          xp: quest.xp ?? undefined,
+          objective: quest.objective ?? undefined,
+          rewards: rewards
+            .filter((item) => item.questPosition === quest.position)
             .map(({ itemId, name: itemName }) => ({
               itemId,
               name: itemName,

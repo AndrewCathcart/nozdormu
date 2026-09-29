@@ -13,7 +13,7 @@ function synced(
   return { build, dungeons, items };
 }
 
-// A made-up dungeon with two bosses, one with loot seen.
+// A made-up dungeon with two bosses, one with loot seen, and two quests, one scanned in full.
 function dungeon(name: string, minLevel = 13): Dungeon {
   return {
     name,
@@ -30,13 +30,35 @@ function dungeon(name: string, minLevel = 13): Dungeon {
       },
       { name: "Made-up Tyrant", loot: [] },
     ],
+    quests: [
+      {
+        id: 90_101,
+        name: "Made-up Errand",
+        side: "Horde",
+        className: "Warlock",
+        requiredLevel: 12,
+        xp: 1450,
+        objective: "Bring 5 Made-up Fangs to a made-up trainer.",
+        rewards: [{ itemId: 280_103, name: "Made-up Staff" }],
+      },
+      {
+        id: 90_102,
+        name: "Made-up Rumour",
+        side: undefined,
+        className: undefined,
+        requiredLevel: undefined,
+        xp: undefined,
+        objective: undefined,
+        rewards: [],
+      },
+    ],
   };
 }
 
 // Tests share one database, and each sync replaces every dungeon, so each test syncs and reads in
 // one go rather than relying on another test's data.
 describe("dungeon store", () => {
-  it("stores the synced dungeons and gives one back by name", async () => {
+  it("stores the synced dungeons, with their bosses and quests, and gives one back by name", async () => {
     const store = createDungeonStore(database.db);
 
     await store.replaceAll(

@@ -11,6 +11,23 @@ export interface Boss {
   readonly loot: readonly LootItem[];
 }
 
+export type Faction = "Alliance" | "Horde" | "Both";
+
+// A quest for the dungeon. Spyglass hasn't scanned every detail of every quest, so only its ID and
+// name are certain.
+export interface Quest {
+  readonly id: number;
+  readonly name: string;
+  readonly side: Faction | undefined;
+  // The class that can take it, for a class quest, such as "Warlock".
+  readonly className: string | undefined;
+  // The level needed to take it.
+  readonly requiredLevel: number | undefined;
+  readonly xp: number | undefined;
+  readonly objective: string | undefined;
+  readonly rewards: readonly LootItem[];
+}
+
 export interface Dungeon {
   readonly name: string;
   readonly minLevel: number;
@@ -19,6 +36,7 @@ export interface Dungeon {
   readonly requiredLevel: number | undefined;
   // In the game's encounter order, which isn't always the order they're fought in.
   readonly bosses: readonly Boss[];
+  readonly quests: readonly Quest[];
 }
 
 // One of an item's stats as the game names it, such as "STAMINA" or "RESISTANCE0_NAME" (armour).
@@ -78,6 +96,20 @@ const dungeonFile = z.object({
       loot: z.array(z.object({ item: z.int().positive(), name: z.string() })),
     }),
   ),
+  quests: z
+    .array(
+      z.object({
+        id: z.int().positive(),
+        name: z.string(),
+        side: z.enum(["Alliance", "Horde", "Both"]).optional(),
+        class: z.string().optional(),
+        requiredLevel: z.int().optional(),
+        xp: z.int().optional(),
+        objective: z.string().optional(),
+        items: z.array(z.object({ item: z.int().positive(), name: z.string() })).optional(),
+      }),
+    )
+    .optional(),
 });
 
 // Items by ID. An item without an English name is left out.
@@ -133,6 +165,16 @@ export function createSpyglassReader(options: SpyglassReaderOptions): SpyglassRe
         bosses: dungeon.encounters.map((encounter) => ({
           name: encounter.name,
           loot: encounter.loot.map((item) => ({ itemId: item.item, name: item.name })),
+        })),
+        quests: (dungeon.quests ?? []).map((quest) => ({
+          id: quest.id,
+          name: quest.name,
+          side: quest.side,
+          className: quest.class,
+          requiredLevel: quest.requiredLevel,
+          xp: quest.xp,
+          objective: quest.objective,
+          rewards: (quest.items ?? []).map((item) => ({ itemId: item.item, name: item.name })),
         })),
       });
     }

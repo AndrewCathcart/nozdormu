@@ -1,6 +1,8 @@
 export type {
   AutocompleteChoice,
   AutocompleteQuery,
+  ButtonPress,
+  ButtonResponse,
   CommandDefinition,
   CommandInvocation,
   CommandOptionValue,

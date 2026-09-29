@@ -37,6 +37,55 @@ const hollow: StoredDungeon = {
     },
     { name: "Made-up Tyrant", loot: [] },
   ],
+  quests: [],
+};
+
+// The same dungeon with two quests: one scanned in full, one only by name, which comes last since
+// its level isn't known.
+const hollowWithQuests: StoredDungeon = {
+  ...hollow,
+  quests: [
+    {
+      id: 90_102,
+      name: "Made-up Rumour",
+      side: undefined,
+      className: undefined,
+      requiredLevel: undefined,
+      xp: undefined,
+      objective: undefined,
+      rewards: [],
+    },
+    {
+      id: 90_101,
+      name: "Made-up Errand",
+      side: "Horde",
+      className: "Warlock",
+      requiredLevel: 12,
+      xp: 1450,
+      objective: "Bring 5 Made-up Fangs to a made-up trainer.",
+      rewards: [
+        {
+          itemId: 280_103,
+          name: "Made-up Staff",
+          scanned: {
+            id: 280_103,
+            name: "Made-up Staff",
+            quality: 2,
+            itemLevel: 15,
+            requiredLevel: 10,
+            itemClass: 2,
+            itemSubclass: 10,
+            slot: "INVTYPE_2HWEAPON",
+            stats: [
+              { stat: "DAMAGE_PER_SECOND", value: 9.4 },
+              { stat: "INTELLECT", value: 3 },
+            ],
+          },
+        },
+        { itemId: 280_104, name: "Made-up Ring", scanned: undefined },
+      ],
+    },
+  ],
 };
 
 // An in-memory store holding these dungeons.
@@ -402,5 +451,69 @@ describe("/dungeon", () => {
     expect(choices).toEqual([
       { name: "The Made-up Hollow (levels 13–18)", value: "The Made-up Hollow" },
     ]);
+  });
+});
+
+// The buttons under a card, with the given one greyed out as the card showing.
+function switchButtons(showing: "loot" | "quests", questCount: number) {
+  return [
+    {
+      type: 1,
+      components: [
+        {
+          type: 2,
+          style: showing === "loot" ? 1 : 2,
+          label: "Bosses & loot",
+          custom_id: "dungeon:loot:The Made-up Hollow",
+          disabled: showing === "loot",
+        },
+        {
+          type: 2,
+          style: showing === "quests" ? 1 : 2,
+          label: `Quests (${String(questCount)})`,
+          custom_id: "dungeon:quests:The Made-up Hollow",
+          disabled: showing === "quests",
+        },
+      ],
+    },
+  ];
+}
+
+describe("/dungeon's quests", () => {
+  it("shows the dungeon's quests, lowest level first, when Quests is pressed", async () => {
+    const command = createDungeonCommand(createFakeStore([hollowWithQuests]));
+
+    const response = await command.press?.({ customId: "dungeon:quests:The Made-up Hollow" });
+
+    expect(response).toEqual({
+      kind: "update",
+      message: {
+        embeds: [
+          {
+            color: 0xa3_35_ee,
+            title: "The Made-up Hollow",
+            description: "Levels 13–18 · enter from level 10",
+            fields: [
+              {
+                name: "Made-up Errand",
+                value: [
+                  "Horde · Warlocks only · from level 12 · 1,450 XP · [Wowhead](https://www.wowhead.com/forever/quest=90101)",
+                  "*Bring 5 Made-up Fangs to a made-up trainer.*",
+                  "[Made-up Staff](https://www.wowhead.com/forever/item=280103) · Two-Hand Staff · 9.4 DPS, +3 Int",
+                  "[Made-up Ring](https://www.wowhead.com/forever/item=280104)",
+                ].join("\n"),
+              },
+              {
+                name: "Made-up Rumour",
+                value: "[Wowhead](https://www.wowhead.com/forever/quest=90102)",
+              },
+            ],
+            footer: { text: "Quests and their details may be incomplete." },
+          },
+        ],
+        components: switchButtons("quests", 2),
+        allowed_mentions: { parse: [] },
+      },
+    });
   });
 });

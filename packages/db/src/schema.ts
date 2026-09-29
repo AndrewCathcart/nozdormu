@@ -172,6 +172,45 @@ export const dungeonLoot = pgTable(
   ],
 );
 
+// Each dungeon's quests, in Spyglass's order. Only the ID and name are certain; the side is
+// "Alliance", "Horde" or "Both", and the class is set for a class quest.
+export const dungeonQuests = pgTable(
+  "dungeon_quests",
+  {
+    dungeon: text("dungeon")
+      .notNull()
+      .references(() => dungeons.name, { onDelete: "cascade" }),
+    position: integer("position").notNull(),
+    questId: integer("quest_id").notNull(),
+    name: text("name").notNull(),
+    side: text("side"),
+    className: text("class_name"),
+    requiredLevel: integer("required_level"),
+    xp: integer("xp"),
+    objective: text("objective"),
+  },
+  (table) => [primaryKey({ columns: [table.dungeon, table.position] })],
+);
+
+// Each quest's reward items, in Spyglass's order.
+export const dungeonQuestRewards = pgTable(
+  "dungeon_quest_rewards",
+  {
+    dungeon: text("dungeon").notNull(),
+    questPosition: integer("quest_position").notNull(),
+    position: integer("position").notNull(),
+    itemId: integer("item_id").notNull(),
+    itemName: text("item_name").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.dungeon, table.questPosition, table.position] }),
+    foreignKey({
+      columns: [table.dungeon, table.questPosition],
+      foreignColumns: [dungeonQuests.dungeon, dungeonQuests.position],
+    }).onDelete("cascade"),
+  ],
+);
+
 // Items as Spyglass scanned them in the game, replaced with the dungeons by each sync. The class and
 // subclass are the game's IDs for what kind of item it is, such as 4 (armour) and 2 (leather), and
 // the slot is its name for where it's worn, such as "INVTYPE_NECK".

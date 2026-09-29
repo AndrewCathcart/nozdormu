@@ -12,6 +12,7 @@ function dungeons(count: number): Dungeon[] {
     maxLevel: 15 + index,
     requiredLevel: undefined,
     bosses: [{ name: `Made-up Boss ${String(index + 1)}`, loot: [] }],
+    quests: [],
   }));
 }
 

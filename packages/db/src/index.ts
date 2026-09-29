@@ -6,6 +6,8 @@ export {
   classSpells,
   dungeonBosses,
   dungeonLoot,
+  dungeonQuestRewards,
+  dungeonQuests,
   dungeons,
   gameBuilds,
   items,
