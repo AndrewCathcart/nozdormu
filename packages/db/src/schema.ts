@@ -1,4 +1,5 @@
-import { index, integer, pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { check, index, integer, pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core";
 
 // The hash of the command definitions last registered for each application in each server, so
 // startup only re-registers commands when they've changed.
@@ -68,17 +69,24 @@ export const items = pgTable(
 // Profession recipes, replaced wholesale with the items by each import. Keyed by the recipe's
 // spell. The item and its count are both null for an enchant, and the skill levels are both null
 // where the game data has none.
-export const recipes = pgTable("recipes", {
-  spellId: integer("spell_id").primaryKey(),
-  name: text("name").notNull(),
-  professions: text("professions").array().notNull(),
-  itemId: integer("item_id"),
-  itemCount: integer("item_count"),
-  yellowAt: integer("yellow_at"),
-  greyAt: integer("grey_at"),
-  // The recipe items that teach it.
-  taughtBy: integer("taught_by").array().notNull(),
-});
+export const recipes = pgTable(
+  "recipes",
+  {
+    spellId: integer("spell_id").primaryKey(),
+    name: text("name").notNull(),
+    professions: text("professions").array().notNull(),
+    itemId: integer("item_id"),
+    itemCount: integer("item_count"),
+    yellowAt: integer("yellow_at"),
+    greyAt: integer("grey_at"),
+    // The recipe items that teach it.
+    taughtBy: integer("taught_by").array().notNull(),
+  },
+  (table) => [
+    check("recipes_item_and_count", sql`(${table.itemId} is null) = (${table.itemCount} is null)`),
+    check("recipes_skill_levels", sql`(${table.yellowAt} is null) = (${table.greyAt} is null)`),
+  ],
+);
 
 // Each recipe's reagents, in the game's order.
 export const recipeReagents = pgTable(

@@ -54,12 +54,27 @@ describe("game data store", () => {
     const store = createGameDataStore(database.db);
     const enchant: RecipeRecord = {
       ...recipe(900_001, "Enchant Made-up Bracer - Testing"),
+      professions: ["Enchanting"],
       result: { kind: "enchant" },
     };
 
     await importBuild(store, "1.60.1.1111", [], [enchant]);
 
     expect(await store.getRecipe(900_001)).toEqual(enchant);
+  });
+
+  it("finds an enchant, which makes no item, by its name", async () => {
+    const store = createGameDataStore(database.db);
+    const enchant: RecipeRecord = {
+      ...recipe(900_001, "Enchant Made-up Cloak - Testing"),
+      professions: ["Enchanting"],
+      result: { kind: "enchant" },
+    };
+    await importBuild(store, "1.60.1.1112", [], [enchant]);
+
+    const found = await store.searchRecipes("cloak", 25);
+
+    expect(found.map((match) => match.name)).toEqual(["Enchant Made-up Cloak - Testing"]);
   });
 
   it("keeps a recipe without skill levels", async () => {

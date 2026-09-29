@@ -17,7 +17,8 @@ export interface SkillLevels {
   readonly greyAt: number;
 }
 
-// What a recipe does: makes an item, or enchants one (Enchanting's enchants).
+// What a recipe does: makes an item, or enchants one (Enchanting's enchants, and a few of
+// Engineering's tinkers).
 export type RecipeResult =
   | { readonly kind: "item"; readonly itemId: number; readonly count: number }
   | { readonly kind: "enchant" };
@@ -94,8 +95,9 @@ const itemXItemEffectRow = z.object({ ItemEffectID: wholeNumber, ItemID: wholeNu
 const createItemEffect = 24;
 const enchantItemEffect = 53;
 
-// What each recipe spell does, by spell ID. Making an item wins over enchanting one.
-function recipeResults(csv: string): Map<number, RecipeResult> {
+// What each spell that makes or enchants an item does, by spell ID. Making an item wins over
+// enchanting one.
+function spellResults(csv: string): Map<number, RecipeResult> {
   const results = new Map<number, RecipeResult>();
   for (const effect of readTable("SpellEffect", csv, spellEffectRow)) {
     if (effect.Effect === createItemEffect && effect.EffectItemType !== 0) {
@@ -160,7 +162,7 @@ export function parseRecipes(tables: Readonly<Record<RecipeTable, string>>): Rec
   const spellNames = new Map(
     readTable("SpellName", tables.SpellName, spellNameRow).map((row) => [row.ID, row.Name_lang]),
   );
-  const results = recipeResults(tables.SpellEffect);
+  const results = spellResults(tables.SpellEffect);
   const reagents = new Map(
     readTable("SpellReagents", tables.SpellReagents, spellReagentsRow).map((row) => [
       row.SpellID,

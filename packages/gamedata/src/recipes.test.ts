@@ -104,6 +104,35 @@ describe("parseRecipes", () => {
     ]);
   });
 
+  it("counts a spell that both makes and enchants an item as making it, whatever the order", () => {
+    const recipes = parseRecipes(
+      tables({
+        SkillLineAbility: csv([
+          skillLineAbilityHeader,
+          [1, 164, 900_001, 50, 100],
+          [2, 164, 900_002, 50, 100],
+        ]),
+        SpellName: csv([
+          ["ID", "Name_lang"],
+          [900_001, "Made-up Sword of Testing"],
+          [900_002, "Made-up Shield of Testing"],
+        ]),
+        SpellEffect: csv([
+          spellEffectHeader,
+          [1, 900_001, 53, 0, 0],
+          [2, 900_001, 24, 270_001, 1],
+          [3, 900_002, 24, 270_002, 1],
+          [4, 900_002, 53, 0, 0],
+        ]),
+      }),
+    );
+
+    expect(recipes.map((recipe) => recipe.result)).toEqual([
+      { kind: "item", itemId: 270_001, count: 1 },
+      { kind: "item", itemId: 270_002, count: 1 },
+    ]);
+  });
+
   // Mages' Conjure spells make items too, from a class skill line (category 7).
   it("leaves out spells that aren't a profession's", () => {
     const recipes = parseRecipes(

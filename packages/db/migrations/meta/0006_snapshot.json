@@ -1,5 +1,5 @@
 {
-  "id": "35c9f0bd-1bad-4a51-83b6-cca8dce20503",
+  "id": "21584df0-5f50-4856-97e5-14c2d00a76aa",
   "prevId": "b27e00fa-069e-4ccf-ad02-b5760123a520",
   "version": "7",
   "dialect": "postgresql",
@@ -297,7 +297,16 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "recipes_item_and_count": {
+          "name": "recipes_item_and_count",
+          "value": "(\"recipes\".\"item_id\" is null) = (\"recipes\".\"item_count\" is null)"
+        },
+        "recipes_skill_levels": {
+          "name": "recipes_skill_levels",
+          "value": "(\"recipes\".\"yellow_at\" is null) = (\"recipes\".\"grey_at\" is null)"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.youtube_channels": {

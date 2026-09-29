@@ -22,6 +22,7 @@ const madeUpItemNames = new Map([
   [270_010, "Made-up Ore"],
   [270_011, "Made-up Crystal"],
   [270_012, "Made-up_Underscored_Dust"],
+  [270_101, "Formula: Enchant Made-up Bracer - Testing"],
   [270_100, "Recipe: Transmute Made-up Metal"],
 ]);
 
@@ -80,6 +81,7 @@ describe("/recipe", () => {
       name: "Enchant Made-up Bracer - Testing",
       professions: ["Enchanting"],
       result: { kind: "enchant" },
+      taughtBy: [270_101],
     };
     const command = createRecipeCommand(createFakeStore([enchant]));
 
@@ -90,7 +92,7 @@ describe("/recipe", () => {
         "**Enchant Made-up Bracer - Testing** · Enchanting",
         "Reagents: 1 × Made-up Ore, 2 × Made-up Crystal",
         "Turns yellow at 275 and grey at 290",
-        "Taught by Recipe: Transmute Made-up Metal",
+        "Taught by Formula: Enchant Made-up Bracer - Testing",
         "https://www.wowhead.com/forever/spell=900001",
         "-# Recipe data from wago.tools",
       ].join("\n"),
