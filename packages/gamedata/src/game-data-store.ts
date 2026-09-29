@@ -1,5 +1,13 @@
-import { type Database, gameBuilds, items, recipeReagents, recipes } from "@nozdormu/db";
-import { and, asc, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
+import {
+  classSpells,
+  type Database,
+  gameBuilds,
+  items,
+  recipeReagents,
+  recipes,
+} from "@nozdormu/db";
+import { and, asc, desc, eq, gt, ilike, inArray, min, or, sql } from "drizzle-orm";
+import type { ClassSpell } from "./class-spells.ts";
 import type { ItemRecord } from "./item-sparse.ts";
 import type { RecipeRecord, RecipeResult, SkillLevels } from "./recipes.ts";
 
@@ -16,6 +24,7 @@ export type RecipeSummary = Pick<RecipeRecord, "spellId" | "name" | "professions
 export interface GameBuild extends ImportedBuild {
   readonly items: readonly ItemRecord[];
   readonly recipes: readonly RecipeRecord[];
+  readonly classSpells: readonly ClassSpell[];
 }
 
 export interface GameDataStore {
@@ -32,6 +41,13 @@ export interface GameDataStore {
   // Recipes whose name, or whose item's name, contains the text: names starting with it first,
   // then shorter names.
   readonly searchRecipes: (text: string, limit: number) => Promise<RecipeSummary[]>;
+  // What a class learns from its trainer at a level, by name.
+  readonly classSpellsAt: (classId: number, level: number) => Promise<ClassSpell[]>;
+  // The first level after this one at which the class learns something, if any.
+  readonly nextClassSpellLevel: (
+    classId: number,
+    afterLevel: number,
+  ) => Promise<number | undefined>;
 }
 
 // Postgres allows 65,535 parameters per statement; at most eight per row keeps this well under.
@@ -82,6 +98,7 @@ export function createGameDataStore(db: Database): GameDataStore {
         // Deleting a recipe deletes its reagents too.
         await tx.delete(recipes);
         await tx.delete(items);
+        await tx.delete(classSpells);
         await insertInBatches(build.items, (batch) => tx.insert(items).values(batch));
         await insertInBatches(
           build.recipes.map((recipe) => ({
@@ -105,6 +122,14 @@ export function createGameDataStore(db: Database): GameDataStore {
             })),
           ),
           (batch) => tx.insert(recipeReagents).values(batch),
+        );
+        await insertInBatches(
+          build.classSpells.map((spell) => ({
+            ...spell,
+            rank: spell.rank ?? null,
+            races: [...spell.races],
+          })),
+          (batch) => tx.insert(classSpells).values(batch),
         );
         await tx
           .insert(gameBuilds)
@@ -195,6 +220,21 @@ export function createGameDataStore(db: Database): GameDataStore {
         ...recipe,
         skillLevels: skillLevelsOf(yellowAt, greyAt),
       }));
+    },
+    classSpellsAt: async (classId, level) => {
+      const found = await db
+        .select()
+        .from(classSpells)
+        .where(and(eq(classSpells.classId, classId), eq(classSpells.level, level)))
+        .orderBy(asc(classSpells.name), asc(classSpells.rank));
+      return found.map((spell) => ({ ...spell, rank: spell.rank ?? undefined }));
+    },
+    nextClassSpellLevel: async (classId, afterLevel) => {
+      const [next] = await db
+        .select({ level: min(classSpells.level) })
+        .from(classSpells)
+        .where(and(eq(classSpells.classId, classId), gt(classSpells.level, afterLevel)));
+      return next?.level ?? undefined;
     },
   };
 }

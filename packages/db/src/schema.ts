@@ -101,3 +101,21 @@ export const recipeReagents = pgTable(
   },
   (table) => [primaryKey({ columns: [table.spellId, table.position] })],
 );
+
+// The spells each class learns from its trainer, replaced wholesale with the items by each import.
+// The rank is null for a spell with no ranks, and races is empty when every race learns it.
+export const classSpells = pgTable(
+  "class_spells",
+  {
+    classId: integer("class_id").notNull(),
+    spellId: integer("spell_id").notNull(),
+    level: integer("level").notNull(),
+    name: text("name").notNull(),
+    rank: integer("rank"),
+    races: text("races").array().notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.classId, table.spellId] }),
+    index("class_spells_class_level").on(table.classId, table.level),
+  ],
+);
