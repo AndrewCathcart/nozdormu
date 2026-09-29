@@ -11,6 +11,24 @@ export interface Boss {
   readonly loot: readonly LootItem[];
 }
 
+export const faction = z.enum(["Alliance", "Horde", "Both"]);
+export type Faction = z.infer<typeof faction>;
+
+// A quest for the dungeon. Spyglass hasn't scanned every detail of every quest, so only its ID and
+// name are certain.
+export interface Quest {
+  readonly id: number;
+  readonly name: string;
+  readonly side: Faction | undefined;
+  // The class that can take it, for a class quest, such as "Warlock".
+  readonly className: string | undefined;
+  // The level needed to take it.
+  readonly requiredLevel: number | undefined;
+  readonly xp: number | undefined;
+  readonly objective: string | undefined;
+  readonly rewards: readonly LootItem[];
+}
+
 export interface Dungeon {
   readonly name: string;
   readonly minLevel: number;
@@ -19,6 +37,7 @@ export interface Dungeon {
   readonly requiredLevel: number | undefined;
   // In the game's encounter order, which isn't always the order they're fought in.
   readonly bosses: readonly Boss[];
+  readonly quests: readonly Quest[];
 }
 
 // One of an item's stats as the game names it, such as "STAMINA" or "RESISTANCE0_NAME" (armour).
@@ -67,6 +86,22 @@ const listing = z.object({ files: z.array(z.object({ name: z.string() })) });
 const dungeonFilePath = /^\/\.contribute\/data\/(dungeons\/[a-z0-9_]+\.json)$/;
 const itemFilePath = /^\/\.contribute\/data\/(items\/items_\d+\.json)$/;
 
+// A quest as Spyglass lists it. Only the ID and name are needed; a detail that isn't what's
+// expected is left out rather than failing the quest.
+const questEntry = z.object({
+  id: z.int().positive(),
+  name: z.string(),
+  side: faction.optional().catch(undefined),
+  class: z.string().optional().catch(undefined),
+  requiredLevel: z.int().optional().catch(undefined),
+  xp: z.int().optional().catch(undefined),
+  objective: z.string().optional().catch(undefined),
+  items: z
+    .array(z.object({ item: z.int().positive(), name: z.string() }))
+    .optional()
+    .catch(undefined),
+});
+
 const dungeonFile = z.object({
   name: z.string(),
   minLevel: z.int().optional(),
@@ -78,6 +113,8 @@ const dungeonFile = z.object({
       loot: z.array(z.object({ item: z.int().positive(), name: z.string() })),
     }),
   ),
+  // Each quest is read on its own (`questEntry`), so one odd quest doesn't fail the sync.
+  quests: z.array(z.unknown()).optional(),
 });
 
 // Items by ID. An item without an English name is left out.
@@ -134,6 +171,21 @@ export function createSpyglassReader(options: SpyglassReaderOptions): SpyglassRe
           name: encounter.name,
           loot: encounter.loot.map((item) => ({ itemId: item.item, name: item.name })),
         })),
+        quests: (dungeon.quests ?? [])
+          .flatMap((entry) => {
+            const parsed = questEntry.safeParse(entry);
+            return parsed.success ? [parsed.data] : [];
+          })
+          .map((quest) => ({
+            id: quest.id,
+            name: quest.name,
+            side: quest.side,
+            className: quest.class,
+            requiredLevel: quest.requiredLevel,
+            xp: quest.xp,
+            objective: quest.objective,
+            rewards: (quest.items ?? []).map((item) => ({ itemId: item.item, name: item.name })),
+          })),
       });
     }
 

@@ -99,10 +99,57 @@ describe("createSpyglassReader", () => {
             },
             { name: "Made-up Tyrant", loot: [] },
           ],
+          quests: [],
         },
       ],
       items: [],
     });
+  });
+
+  it("reads each dungeon's quests, with whatever has been scanned of each", async () => {
+    const fetch = createFakeFetch({
+      "dungeons/the_made_up_hollow.json": {
+        ...madeUpHollow,
+        quests: [
+          {
+            id: 90_101,
+            name: "Made-up Errand",
+            side: "Horde",
+            class: "Warlock",
+            requiredLevel: 12,
+            xp: 1450,
+            objective: "Bring 5 Made-up Fangs to a made-up trainer.",
+            items: [{ item: 280_103, name: "Made-up Staff" }],
+          },
+          { id: 90_102, name: "Made-up Rumour" },
+        ],
+      },
+    });
+
+    const { dungeons } = await createSpyglassReader({ fetch })();
+
+    expect(dungeons[0]?.quests).toEqual([
+      {
+        id: 90_101,
+        name: "Made-up Errand",
+        side: "Horde",
+        className: "Warlock",
+        requiredLevel: 12,
+        xp: 1450,
+        objective: "Bring 5 Made-up Fangs to a made-up trainer.",
+        rewards: [{ itemId: 280_103, name: "Made-up Staff" }],
+      },
+      {
+        id: 90_102,
+        name: "Made-up Rumour",
+        side: undefined,
+        className: undefined,
+        requiredLevel: undefined,
+        xp: undefined,
+        objective: undefined,
+        rewards: [],
+      },
+    ]);
   });
 
   it("reads the items it has scanned, with their kind and stats", async () => {
@@ -193,6 +240,44 @@ describe("createSpyglassReader", () => {
       `${data}/config.json`,
       listing,
       `${data}/dungeons/the_made_up_hollow.json`,
+    ]);
+  });
+
+  it("drops quest details it can't read, and quests without an ID and name, keeping the rest", async () => {
+    const fetch = createFakeFetch({
+      "dungeons/the_made_up_hollow.json": {
+        ...madeUpHollow,
+        quests: [
+          { id: 90_101, name: "Made-up Errand", side: "Neutral", xp: null, objective: 5 },
+          { name: "Made-up Nameless Errand Without An ID" },
+          { id: 90_103, name: "Made-up Rumour", items: "none" },
+        ],
+      },
+    });
+
+    const { dungeons } = await createSpyglassReader({ fetch })();
+
+    expect(dungeons[0]?.quests).toEqual([
+      {
+        id: 90_101,
+        name: "Made-up Errand",
+        side: undefined,
+        className: undefined,
+        requiredLevel: undefined,
+        xp: undefined,
+        objective: undefined,
+        rewards: [],
+      },
+      {
+        id: 90_103,
+        name: "Made-up Rumour",
+        side: undefined,
+        className: undefined,
+        requiredLevel: undefined,
+        xp: undefined,
+        objective: undefined,
+        rewards: [],
+      },
     ]);
   });
 

@@ -36,6 +36,7 @@ export function createDungeonFeature(deps: DungeonFeatureDeps): Feature {
         build,
         dungeons: dungeons.length,
         bosses: dungeons.reduce((total, dungeon) => total + dungeon.bosses.length, 0),
+        quests: dungeons.reduce((total, dungeon) => total + dungeon.quests.length, 0),
         items: items.length,
       },
       "Synced Forever's dungeons and items from Spyglass",

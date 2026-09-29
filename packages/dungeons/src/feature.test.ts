@@ -4,7 +4,7 @@ import type { DungeonStore } from "./dungeon-store.ts";
 import { createDungeonFeature, type DungeonFeatureDeps } from "./feature.ts";
 import type { Dungeon, ScannedItem, SpyglassData, SpyglassReader } from "./spyglass.ts";
 
-// Made-up dungeons, each with one boss.
+// Made-up dungeons, each with one boss and one quest.
 function dungeons(count: number): Dungeon[] {
   return Array.from({ length: count }, (_, index) => ({
     name: `Made-up Dungeon ${String(index + 1)}`,
@@ -12,6 +12,18 @@ function dungeons(count: number): Dungeon[] {
     maxLevel: 15 + index,
     requiredLevel: undefined,
     bosses: [{ name: `Made-up Boss ${String(index + 1)}`, loot: [] }],
+    quests: [
+      {
+        id: 90_000 + index,
+        name: `Made-up Quest ${String(index + 1)}`,
+        side: undefined,
+        className: undefined,
+        requiredLevel: undefined,
+        xp: undefined,
+        objective: undefined,
+        rewards: [],
+      },
+    ],
   }));
 }
 
@@ -70,7 +82,14 @@ describe("createDungeonFeature", () => {
 
     expect(deps.store.replaceAll).toHaveBeenCalledExactlyOnceWith(synced(25, 10_000));
     expect(deps.logger.info).toHaveBeenCalledExactlyOnceWith(
-      { event: "dungeons.synced", build: "1.60.1.69913", dungeons: 25, bosses: 25, items: 10_000 },
+      {
+        event: "dungeons.synced",
+        build: "1.60.1.69913",
+        dungeons: 25,
+        bosses: 25,
+        quests: 25,
+        items: 10_000,
+      },
       "Synced Forever's dungeons and items from Spyglass",
     );
   });

@@ -1,12 +1,28 @@
 import {
+  type ButtonResponse,
   type CommandReply,
   escapeMarkdown,
   maxAutocompleteChoices,
   type SlashCommand,
 } from "@nozdormu/core";
-import { type APIEmbed, ApplicationCommandOptionType, MessageFlags } from "discord-api-types/v10";
-import type { DungeonStore, DungeonSummary, StoredDungeon } from "./dungeon-store.ts";
+import {
+  type APIActionRowComponent,
+  type APIButtonComponent,
+  type APIEmbed,
+  ApplicationCommandOptionType,
+  ButtonStyle,
+  ComponentType,
+  MessageFlags,
+} from "discord-api-types/v10";
+import type {
+  DungeonStore,
+  DungeonSummary,
+  StoredDungeon,
+  StoredLootItem,
+  StoredQuest,
+} from "./dungeon-store.ts";
 import { itemDetails } from "./item-text.ts";
+import type { Faction } from "./spyglass.ts";
 
 // Discord's limits on a card: its sections, each section's text, and the whole card's text.
 const maxFields = 25;
@@ -16,22 +32,22 @@ const maxCardLength = 6000;
 // WoW's colour for epic items.
 const epicPurple = 0xa3_35_ee;
 
-// A boss's loot, one linked item a line: all of it, or the first few and how many more.
-function lootLines(loot: StoredDungeon["bosses"][number]["loot"], maxShown: number): string {
-  if (loot.length === 0) {
-    return "No loot seen yet";
-  }
-  const lines = loot.slice(0, maxShown).map((item) => {
-    const link = `[${escapeMarkdown(item.name)}](https://www.wowhead.com/forever/item=${String(item.itemId)})`;
-    const details = item.scanned === undefined ? "" : itemDetails(item.scanned);
-    return details === "" ? link : `${link} · ${details}`;
-  });
-  const more = loot.length - lines.length;
-  return [...lines, ...(more > 0 ? [`and ${String(more)} more`] : [])].join("\n");
+// An item, linked to Wowhead, then its slot, kind and stats where it's been scanned.
+function itemLine(item: StoredLootItem): string {
+  const link = `[${escapeMarkdown(item.name)}](https://www.wowhead.com/forever/item=${String(item.itemId)})`;
+  const details = item.scanned === undefined ? "" : itemDetails(item.scanned);
+  return details === "" ? link : `${link} · ${details}`;
 }
 
-// The card showing a dungeon: its levels, then a section per boss listing its loot.
-function dungeonCard(dungeon: StoredDungeon, maxLootShown: number): APIEmbed {
+// Items one a line: all of them, or the first few and how many more.
+function itemLines(items: readonly StoredLootItem[], maxShown: number): string[] {
+  const lines = items.slice(0, maxShown).map(itemLine);
+  const more = items.length - lines.length;
+  return [...lines, ...(more > 0 ? [`and ${String(more)} more`] : [])];
+}
+
+// The top of both cards: the dungeon's name and levels.
+function heading(dungeon: StoredDungeon): Pick<APIEmbed, "color" | "title" | "description"> {
   const entry =
     dungeon.requiredLevel === undefined
       ? ""
@@ -40,14 +56,85 @@ function dungeonCard(dungeon: StoredDungeon, maxLootShown: number): APIEmbed {
     color: epicPurple,
     title: escapeMarkdown(dungeon.name),
     description: `Levels ${String(dungeon.minLevel)}–${String(dungeon.maxLevel)}${entry}`,
+  };
+}
+
+// The card showing a dungeon's bosses, a section each listing its loot.
+function lootCard(dungeon: StoredDungeon, maxLootShown: number): APIEmbed {
+  return {
+    ...heading(dungeon),
     fields: dungeon.bosses.slice(0, maxFields).map((boss) => ({
       name: boss.name,
-      value: lootLines(boss.loot, maxLootShown),
+      value:
+        boss.loot.length === 0 ? "No loot seen yet" : itemLines(boss.loot, maxLootShown).join("\n"),
     })),
     footer: {
       text: "Loot may be incomplete, and has no drop chances.",
     },
   };
+}
+
+const factionNames: Readonly<Record<Faction, string>> = {
+  Alliance: "Alliance",
+  Horde: "Horde",
+  Both: "Both factions",
+};
+
+// A quest's faction, class, level, XP and Wowhead link, then its objective and rewards, leaving out
+// whatever hasn't been scanned.
+function questLines(quest: StoredQuest, maxRewardsShown: number): string {
+  const facts = [
+    // A class quest both factions can take just names the class.
+    quest.side === undefined || (quest.side === "Both" && quest.className !== undefined)
+      ? undefined
+      : factionNames[quest.side],
+    quest.className === undefined ? undefined : `${quest.className}s only`,
+    quest.requiredLevel === undefined ? undefined : `from level ${String(quest.requiredLevel)}`,
+    quest.xp === undefined ? undefined : `${quest.xp.toLocaleString("en-GB")} XP`,
+    `[Wowhead](https://www.wowhead.com/forever/quest=${String(quest.id)})`,
+  ].filter((fact) => fact !== undefined);
+  return [
+    facts.join(" · "),
+    ...(quest.objective === undefined ? [] : [`*${escapeMarkdown(quest.objective)}*`]),
+    ...itemLines(quest.rewards, maxRewardsShown),
+  ].join("\n");
+}
+
+// The card showing a dungeon's quests, lowest level first, a section each. Quests whose level
+// isn't known come last.
+function questsCard(
+  dungeon: StoredDungeon,
+  maxRewardsShown: number,
+  maxQuestsShown: number,
+): APIEmbed {
+  const quests = dungeon.quests
+    .toSorted(
+      (a, b) =>
+        (a.requiredLevel ?? Number.POSITIVE_INFINITY) -
+        (b.requiredLevel ?? Number.POSITIVE_INFINITY),
+    )
+    .slice(0, Math.min(maxQuestsShown, maxFields));
+  const more = dungeon.quests.length - quests.length;
+  return {
+    ...heading(dungeon),
+    fields: quests.map((quest) => ({
+      name: quest.name,
+      value: questLines(quest, maxRewardsShown),
+    })),
+    footer: {
+      text: `Quests and their details may be incomplete.${more > 0 ? ` ${String(more)} more quests didn't fit.` : ""}`,
+    },
+  };
+}
+
+// The quests card with every reward, or with fewer rewards per quest until it fits, then, if even
+// no rewards won't fit, with fewer quests.
+function fittingQuestsCard(dungeon: StoredDungeon): APIEmbed {
+  let fitted = fittingCard((shown) => questsCard(dungeon, shown, maxFields));
+  for (let quests = maxFields - 1; !fits(fitted) && quests > 0; quests -= 1) {
+    fitted = questsCard(dungeon, 0, quests);
+  }
+  return fitted;
 }
 
 // Whether Discord will take the card.
@@ -61,6 +148,62 @@ function fits(card: APIEmbed): boolean {
   ].reduce((total, text) => total + (text ?? "").length, 0);
   return length <= maxCardLength && fields.every((field) => field.value.length <= maxFieldLength);
 }
+
+// The card with every item it lists, or, when that won't fit, with fewer items per section until
+// it does.
+function fittingCard(card: (maxItemsShown: number) => APIEmbed): APIEmbed {
+  let fitted = card(Number.POSITIVE_INFINITY);
+  for (let shown = 8; !fits(fitted) && shown >= 0; shown -= 1) {
+    fitted = card(shown);
+  }
+  return fitted;
+}
+
+type CardView = "loot" | "quests";
+
+// Buttons to switch between the two cards, the one showing greyed out. A dungeon with no quests
+// seen has only the loot card, so no buttons.
+function switchButtons(
+  dungeon: StoredDungeon,
+  showing: CardView,
+): APIActionRowComponent<APIButtonComponent>[] {
+  if (dungeon.quests.length === 0) {
+    return [];
+  }
+  const button = (view: CardView, label: string): APIButtonComponent => ({
+    type: ComponentType.Button,
+    style: view === showing ? ButtonStyle.Primary : ButtonStyle.Secondary,
+    label,
+    custom_id: `dungeon:${view}:${dungeon.name}`,
+    disabled: view === showing,
+  });
+  return [
+    {
+      type: ComponentType.ActionRow,
+      components: [
+        button("loot", "Bosses & loot"),
+        button("quests", `Quests (${String(dungeon.quests.length)})`),
+      ],
+    },
+  ];
+}
+
+// The dungeon's loot or quests card, with the buttons to switch between them.
+function dungeonReply(dungeon: StoredDungeon, showing: CardView): CommandReply {
+  const card =
+    showing === "loot"
+      ? fittingCard((shown) => lootCard(dungeon, shown))
+      : fittingQuestsCard(dungeon);
+  // Always given, even when empty: an update without them would keep the message's old buttons.
+  return {
+    embeds: [card],
+    components: switchButtons(dungeon, showing),
+    allowed_mentions: { parse: [] },
+  };
+}
+
+// A button's custom ID: "dungeon:", the card it shows, a colon and the dungeon's name.
+const buttonIdPattern = /^dungeon:(loot|quests):(.+)$/;
 
 // What players call some of the dungeons, as the words of their names.
 const nicknames: ReadonlyMap<string, string> = new Map([
@@ -156,12 +299,21 @@ export function createDungeonCommand(
           flags: MessageFlags.Ephemeral,
         };
       }
-      // When all the loot won't fit on one card, show fewer items per boss until it does.
-      let card = dungeonCard(dungeon, Number.POSITIVE_INFINITY);
-      for (let shown = 8; !fits(card) && shown >= 0; shown -= 1) {
-        card = dungeonCard(dungeon, shown);
+      return dungeonReply(dungeon, "loot");
+    },
+    press: async ({ customId }): Promise<ButtonResponse> => {
+      const [, view, name] = buttonIdPattern.exec(customId) ?? [];
+      const dungeon = name === undefined ? undefined : await store.get(name);
+      if (dungeon === undefined || (view !== "loot" && view !== "quests")) {
+        return {
+          kind: "reply",
+          message: {
+            content: "I couldn't find that dungeon any more. Look it up again with /dungeon.",
+            flags: MessageFlags.Ephemeral,
+          },
+        };
       }
-      return { embeds: [card], allowed_mentions: { parse: [] } };
+      return { kind: "update", message: dungeonReply(dungeon, view) };
     },
     autocomplete: async (query) => {
       const found = matching(await store.list(), query.value);

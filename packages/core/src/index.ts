@@ -1,6 +1,8 @@
 export type {
   AutocompleteChoice,
   AutocompleteQuery,
+  ButtonPress,
+  ButtonResponse,
   CommandDefinition,
   CommandInvocation,
   CommandOptionValue,
@@ -9,7 +11,7 @@ export type {
   SlashCommand,
 } from "./feature.ts";
 export { createRegistry, maxAutocompleteChoices } from "./registry.ts";
-export type { DispatchResult, Registry } from "./registry.ts";
+export type { DispatchResult, PressResult, Registry } from "./registry.ts";
 export {
   createChannelPublisher,
   createRecentPostReader,

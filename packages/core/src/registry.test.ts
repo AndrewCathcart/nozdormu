@@ -51,6 +51,27 @@ const lookup: Feature = {
   ],
 };
 
+const switcher: Feature = {
+  commands: [
+    {
+      definition: { name: "switch", description: "Show a switch." },
+      handle: () => Promise.resolve({ content: "Off" }),
+      press: ({ customId }) =>
+        Promise.resolve({ kind: "update", message: { content: `Pressed ${customId}` } }),
+    },
+  ],
+};
+
+const brokenSwitch: Feature = {
+  commands: [
+    {
+      definition: { name: "fuse", description: "Always blows." },
+      handle: () => Promise.resolve({ content: "Intact" }),
+      press: () => Promise.reject(new Error("Pop")),
+    },
+  ],
+};
+
 function createFakeLogger() {
   return { warn: vi.fn<LogFn>(), error: vi.fn<LogFn>() } satisfies Pick<Logger, "warn" | "error">;
 }
@@ -237,6 +258,69 @@ describe("createRegistry", () => {
     expect(logger.error).toHaveBeenCalledExactlyOnceWith(
       { event: "autocomplete.failed", commandName: "lookup", err: new Error("Database is down") },
       "Autocomplete failed",
+    );
+  });
+
+  it("routes a button press to the command named at the start of the button's ID", async () => {
+    const registry = createRegistry([greetings, switcher], createFakeLogger());
+
+    expect(await registry.press({ customId: "switch:on" })).toEqual({
+      kind: "handled",
+      commandName: "switch",
+      response: { kind: "update", message: { content: "Pressed switch:on" } },
+    });
+  });
+
+  it("replies privately to a press of a button no command answers", async () => {
+    const registry = createRegistry([greetings], createFakeLogger());
+
+    expect(await registry.press({ customId: "retired:on" })).toEqual({
+      kind: "unknown-button",
+      commandName: "retired",
+      response: {
+        kind: "reply",
+        message: { content: "That button doesn't work any more.", flags: MessageFlags.Ephemeral },
+      },
+    });
+  });
+
+  it("logs a press of a button no command answers", async () => {
+    const logger = createFakeLogger();
+    const registry = createRegistry([greetings], logger);
+
+    await registry.press({ customId: "retired:on" });
+
+    expect(logger.warn).toHaveBeenCalledExactlyOnceWith(
+      { event: "button.unknown", commandName: "retired" },
+      "Button press for no command",
+    );
+  });
+
+  it("turns a press handler that throws into a private error reply", async () => {
+    const registry = createRegistry([brokenSwitch], createFakeLogger());
+
+    expect(await registry.press({ customId: "fuse:on" })).toEqual({
+      kind: "failed",
+      commandName: "fuse",
+      response: {
+        kind: "reply",
+        message: {
+          content: "Something went wrong. It's been logged.",
+          flags: MessageFlags.Ephemeral,
+        },
+      },
+    });
+  });
+
+  it("logs a press handler that throws, with its error", async () => {
+    const logger = createFakeLogger();
+    const registry = createRegistry([brokenSwitch], logger);
+
+    await registry.press({ customId: "fuse:on" });
+
+    expect(logger.error).toHaveBeenCalledExactlyOnceWith(
+      { event: "button.failed", commandName: "fuse", err: new Error("Pop") },
+      "Button press failed",
     );
   });
 });

@@ -3,6 +3,8 @@ import type { Logger } from "pino";
 import type {
   AutocompleteChoice,
   AutocompleteQuery,
+  ButtonPress,
+  ButtonResponse,
   CommandDefinition,
   CommandInvocation,
   CommandReply,
@@ -15,16 +17,33 @@ export type DispatchResult =
   | { readonly kind: "unknown-command"; readonly commandName: string; readonly reply: CommandReply }
   | { readonly kind: "failed"; readonly commandName: string; readonly reply: CommandReply };
 
+// What happened to a button press. The command name is the one at the start of the button's
+// custom ID. A press no command answers, or one that fails, always gets a new (private) reply.
+export type PressResult =
+  | { readonly kind: "handled"; readonly commandName: string; readonly response: ButtonResponse }
+  | {
+      readonly kind: "unknown-button" | "failed";
+      readonly commandName: string;
+      readonly response: { readonly kind: "reply"; readonly message: CommandReply };
+    };
+
 export interface Registry {
   readonly commandDefinitions: readonly CommandDefinition[];
   readonly dispatch: (invocation: CommandInvocation) => Promise<DispatchResult>;
   readonly autocomplete: (query: AutocompleteQuery) => Promise<readonly AutocompleteChoice[]>;
+  // Sends a button press to the command whose name starts the button's custom ID.
+  readonly press: (press: ButtonPress) => Promise<PressResult>;
 }
 
 const unknownCommandReply: CommandReply = {
   content: "I don't know that command.",
   flags: MessageFlags.Ephemeral,
 };
+
+const unknownButtonResponse = {
+  kind: "reply",
+  message: { content: "That button doesn't work any more.", flags: MessageFlags.Ephemeral },
+} as const satisfies ButtonResponse;
 
 const failedReply: CommandReply = {
   content: "Something went wrong. It's been logged.",
@@ -62,6 +81,20 @@ export function createRegistry(
           "Autocomplete failed",
         );
         return [];
+      }
+    },
+    press: async (buttonPress) => {
+      const [commandName = ""] = buttonPress.customId.split(":");
+      const press = commandsByName.get(commandName)?.press;
+      if (press === undefined) {
+        logger.warn({ event: "button.unknown", commandName }, "Button press for no command");
+        return { kind: "unknown-button", commandName, response: unknownButtonResponse };
+      }
+      try {
+        return { kind: "handled", commandName, response: await press(buttonPress) };
+      } catch (error) {
+        logger.error({ event: "button.failed", commandName, err: error }, "Button press failed");
+        return { kind: "failed", commandName, response: { kind: "reply", message: failedReply } };
       }
     },
     dispatch: async (invocation) => {
