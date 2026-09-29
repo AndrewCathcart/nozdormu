@@ -31,3 +31,5 @@ export { createLogger } from "./logger.ts";
 export type { Logger } from "pino";
 export { startScheduler } from "./scheduler.ts";
 export type { JobRunStore, ScheduledJob, Scheduler, SchedulerDeps } from "./scheduler.ts";
+export { latestWeeklyTime } from "./weekly-time.ts";
+export type { Weekday, WeeklyTime } from "./weekly-time.ts";
