@@ -1,7 +1,8 @@
 import { type CommandReply, maxAutocompleteChoices, type SlashCommand } from "@nozdormu/core";
 import { ApplicationCommandOptionType, MessageFlags } from "discord-api-types/v10";
+import type { GameDataStore } from "./game-data-store.ts";
 import type { ItemRecord } from "./item-sparse.ts";
-import type { ItemStore } from "./item-store.ts";
+import { escapeMarkdown, notLoaded, parseId, toChoices } from "./lookup.ts";
 
 const qualityNames: Readonly<Record<number, string>> = {
   0: "Poor",
@@ -46,25 +47,10 @@ const slotNames: Readonly<Record<number, string>> = {
   28: "Relic",
 };
 
-// Discord allows 100 characters in a suggestion's name.
-const maxChoiceNameLength = 100;
-
-const notLoaded: CommandReply = {
-  content: "I haven't loaded the item data yet. Try again in a minute.",
-  flags: MessageFlags.Ephemeral,
-};
-
-// Item IDs are Postgres integers; a longer number typed in is searched for as text instead.
-const maxItemId = 2_147_483_647;
-
 const notFound: CommandReply = {
   content: "I couldn't find that item. Start typing its name and pick one of the suggestions.",
   flags: MessageFlags.Ephemeral,
 };
-
-function escapeMarkdown(text: string): string {
-  return text.replaceAll(/[\\*_~`|>[\]]/g, (character) => `\\${character}`);
-}
 
 // "Rare One-Hand": the quality, and the slot if the item can be equipped.
 function describeKind(item: ItemRecord): string {
@@ -83,22 +69,23 @@ function describeItem(item: ItemRecord): string {
   return details.filter((part) => part !== "").join(" · ");
 }
 
-function choiceName(item: ItemRecord): string {
+// "Rare One-Hand, item level 42", shown after the name in a suggestion.
+function choiceLabel(item: ItemRecord): string {
   const kind = describeKind(item);
-  const suffix = ` (${kind === "" ? "" : `${kind}, `}item level ${String(item.itemLevel)})`;
-  return item.name.slice(0, maxChoiceNameLength - suffix.length) + suffix;
+  return `${kind === "" ? "" : `${kind}, `}item level ${String(item.itemLevel)}`;
 }
 
 // /item: suggests items as you type their name, then shows the one you pick with its Wowhead link.
 // Discord's preview of the link shows the tooltip and where the item comes from.
-export function createItemCommand(items: ItemStore): SlashCommand {
+export function createItemCommand(
+  store: Pick<GameDataStore, "importedBuild" | "getItem" | "searchItems">,
+): SlashCommand {
   const find = async (value: string): Promise<ItemRecord | undefined> => {
-    // A picked suggestion sends the item's ID; text typed without picking one is searched for.
-    const id = Number.parseInt(value, 10);
-    if (/^\d+$/.test(value) && id <= maxItemId) {
-      return items.get(id);
+    const id = parseId(value);
+    if (id !== undefined) {
+      return store.getItem(id);
     }
-    const [best] = await items.search(value, 1);
+    const [best] = await store.searchItems(value, 1);
     return best;
   };
 
@@ -121,7 +108,7 @@ export function createItemCommand(items: ItemStore): SlashCommand {
       const text = typeof value === "string" ? value.trim() : "";
       const item = text === "" ? undefined : await find(text);
       if (item === undefined) {
-        return (await items.importedVersion()) === undefined ? notLoaded : notFound;
+        return (await store.importedBuild()) === undefined ? notLoaded("item") : notFound;
       }
       return {
         content: [
@@ -138,17 +125,14 @@ export function createItemCommand(items: ItemStore): SlashCommand {
       if (text === "") {
         return [];
       }
-      const found = await items.search(text, maxAutocompleteChoices);
-      // Some items exist in several copies (one per class, say) that would look identical.
-      const seen = new Set<string>();
-      return found.flatMap((item) => {
-        const name = choiceName(item);
-        if (seen.has(name)) {
-          return [];
-        }
-        seen.add(name);
-        return [{ name, value: String(item.id) }];
-      });
+      const found = await store.searchItems(text, maxAutocompleteChoices);
+      return toChoices(
+        found.map((item) => ({
+          name: item.name,
+          label: choiceLabel(item),
+          value: String(item.id),
+        })),
+      );
     },
   };
 }
