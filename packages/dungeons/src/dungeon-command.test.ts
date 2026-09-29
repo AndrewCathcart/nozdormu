@@ -1,4 +1,5 @@
-import { MessageFlags } from "discord-api-types/v10";
+import type { CommandReply } from "@nozdormu/core";
+import { type APIEmbed, MessageFlags } from "discord-api-types/v10";
 import { describe, expect, it, vi } from "vitest";
 import { createDungeonCommand } from "./dungeon-command.ts";
 import type { DungeonStore, StoredDungeon } from "./dungeon-store.ts";
@@ -38,30 +39,62 @@ function createFakeStore(stored: readonly StoredDungeon[]) {
   } satisfies Pick<DungeonStore, "get" | "list" | "loadedBuild">;
 }
 
+// The reply's card.
+function card(reply: CommandReply): APIEmbed {
+  const [embed] = reply.embeds ?? [];
+  if (embed === undefined) {
+    throw new Error("The reply has no card.");
+  }
+  return embed;
+}
+
+// A card's length as Discord counts it towards its 6,000-character limit.
+function cardLength(embed: APIEmbed): number {
+  return [
+    embed.title,
+    embed.description,
+    embed.footer?.text,
+    ...(embed.fields ?? []).flatMap((field) => [field.name, field.value]),
+  ].reduce((total, text) => total + (text ?? "").length, 0);
+}
+
 function invoke(name: string) {
   return { commandName: "dungeon", options: new Map([["name", name]]) };
 }
 
 describe("/dungeon", () => {
-  it("shows the dungeon's levels and its bosses, with the loot seen from each", async () => {
+  it("shows the dungeon as a card: its levels, then each boss with its loot linked to Wowhead", async () => {
     const command = createDungeonCommand(createFakeStore([hollow]));
 
     const reply = await command.handle(invoke("The Made-up Hollow"));
 
     expect(reply).toEqual({
-      content: [
-        "**The Made-up Hollow** · levels 13–18, enter from 10",
-        "- **Made-up Warden**: Made-up Choker, Made\\_up \\*Bracers\\*",
-        "- **Made-up Tyrant**",
-        "-# Bosses and loot from Spyglass's scans, as of build 1.60.1.69913. Loot may be incomplete, and has no drop chances.",
-      ].join("\n"),
+      embeds: [
+        {
+          color: 0xa3_35_ee,
+          title: "The Made-up Hollow",
+          description: "Levels 13–18 · enter from level 10",
+          fields: [
+            {
+              name: "Made-up Warden",
+              value: [
+                "[Made-up Choker](https://www.wowhead.com/forever/item=280101)",
+                "[Made\\_up \\*Bracers\\*](https://www.wowhead.com/forever/item=280102)",
+              ].join("\n"),
+            },
+            { name: "Made-up Tyrant", value: "No loot seen yet" },
+          ],
+          footer: {
+            text: "Bosses and loot from Spyglass's scans, as of build 1.60.1.69913. Loot may be incomplete, and has no drop chances.",
+          },
+        },
+      ],
       allowed_mentions: { parse: [] },
     });
   });
 
-  it("shows fewer items per boss when all the loot won't fit in one message", async () => {
-    // 20 bosses with 8 items each: about 4,000 characters in full, and still over Discord's 2,000
-    // with 5, 4 or 3 items per boss, so 2 are shown.
+  it("shows fewer items per boss when all the loot won't fit on one card", async () => {
+    // 20 bosses with 8 linked items each come to over 10,000 characters, where a card allows 6,000.
     const packed: StoredDungeon = {
       ...hollow,
       bosses: Array.from({ length: 20 }, (_boss, boss) => ({
@@ -74,12 +107,15 @@ describe("/dungeon", () => {
     };
     const command = createDungeonCommand(createFakeStore([packed]));
 
-    const reply = await command.handle(invoke("The Made-up Hollow"));
+    const shown = card(await command.handle(invoke("The Made-up Hollow")));
 
-    expect(reply.content?.split("\n")[1]).toBe(
-      "- **Made-up Boss 1**: Made-up Loot Item 01, Made-up Loot Item 02 and 6 more",
-    );
-    expect(reply.content?.length).toBeLessThanOrEqual(2000);
+    expect(shown.fields?.[0]?.value.split("\n")).toEqual([
+      "[Made-up Loot Item 01](https://www.wowhead.com/forever/item=281000)",
+      "[Made-up Loot Item 02](https://www.wowhead.com/forever/item=281001)",
+      "[Made-up Loot Item 03](https://www.wowhead.com/forever/item=281002)",
+      "and 5 more",
+    ]);
+    expect(cardLength(shown)).toBeLessThanOrEqual(6000);
   });
 
   it("finds the best match for typed text that isn't a whole name", async () => {
@@ -87,9 +123,7 @@ describe("/dungeon", () => {
 
     const reply = await command.handle(invoke("made-up hol"));
 
-    expect(reply.content?.split("\n")[0]).toBe(
-      "**The Made-up Hollow** · levels 13–18, enter from 10",
-    );
+    expect(card(reply).title).toBe("The Made-up Hollow");
   });
 
   it("finds a dungeon by the words of its name in any order, ignoring punctuation", async () => {
@@ -99,7 +133,7 @@ describe("/dungeon", () => {
 
     const reply = await command.handle(invoke("madeup zul"));
 
-    expect(reply.content?.split("\n")[0]).toBe("**Zul'Madeup** · levels 13–18, enter from 10");
+    expect(card(reply).title).toBe("Zul'Madeup");
   });
 
   it("finds a dungeon by the name players call it", async () => {
@@ -109,9 +143,7 @@ describe("/dungeon", () => {
 
     const reply = await command.handle(invoke("BRD"));
 
-    expect(reply.content?.split("\n")[0]).toBe(
-      "**Blackrock Depths** · levels 13–18, enter from 10",
-    );
+    expect(card(reply).title).toBe("Blackrock Depths");
   });
 
   it("leaves out the entry level when it isn't known", async () => {
@@ -121,7 +153,7 @@ describe("/dungeon", () => {
 
     const reply = await command.handle(invoke("The Made-up Hollow"));
 
-    expect(reply.content?.split("\n")[0]).toBe("**The Made-up Hollow** · levels 13–18");
+    expect(card(reply).description).toBe("Levels 13–18");
   });
 
   it("says so privately when there's no such dungeon", async () => {
