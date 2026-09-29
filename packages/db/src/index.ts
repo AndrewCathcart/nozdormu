@@ -4,6 +4,9 @@ export { createCommandRegistrationStore } from "./command-registrations.ts";
 export { createJobRunStore } from "./job-runs.ts";
 export {
   classSpells,
+  dungeonBosses,
+  dungeonLoot,
+  dungeons,
   gameBuilds,
   items,
   recipeReagents,

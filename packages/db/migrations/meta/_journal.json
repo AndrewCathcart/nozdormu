@@ -57,6 +57,13 @@
       "when": 1790686536797,
       "tag": "0007_class_spells",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1790693160818,
+      "tag": "0008_dungeons",
+      "breakpoints": true
     }
   ]
 }

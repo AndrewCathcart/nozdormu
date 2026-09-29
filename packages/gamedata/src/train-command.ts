@@ -1,4 +1,4 @@
-import type { CommandReply, SlashCommand } from "@nozdormu/core";
+import { type CommandReply, escapeMarkdown, type SlashCommand } from "@nozdormu/core";
 import {
   type APIApplicationCommandOptionChoice,
   ApplicationCommandOptionType,
@@ -6,7 +6,7 @@ import {
 } from "discord-api-types/v10";
 import type { ClassSpell } from "./class-spells.ts";
 import type { GameDataStore } from "./game-data-store.ts";
-import { escapeMarkdown, notLoaded } from "./lookup.ts";
+import { notLoaded } from "./lookup.ts";
 
 // Class spells were first imported with import format 4.
 const firstFormatWithClassSpells = 4;

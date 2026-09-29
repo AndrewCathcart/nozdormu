@@ -226,6 +226,9 @@ importers:
       '@nozdormu/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@nozdormu/dungeons':
+        specifier: workspace:*
+        version: link:../../packages/dungeons
       '@nozdormu/gamedata':
         specifier: workspace:*
         version: link:../../packages/gamedata
@@ -279,6 +282,24 @@ importers:
       drizzle-kit:
         specifier: 0.31.11
         version: 0.31.11
+
+  packages/dungeons:
+    dependencies:
+      '@nozdormu/core':
+        specifier: workspace:*
+        version: link:../core
+      '@nozdormu/db':
+        specifier: workspace:*
+        version: link:../db
+      discord-api-types:
+        specifier: 'catalog:'
+        version: 0.38.55
+      drizzle-orm:
+        specifier: 'catalog:'
+        version: 0.45.3(postgres@3.4.9)
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.5
 
   packages/gamedata:
     dependencies:

@@ -1,7 +1,6 @@
-import type { CommandReply, SlashCommand } from "@nozdormu/core";
+import { type CommandReply, escapeMarkdown, type SlashCommand } from "@nozdormu/core";
 import { ApplicationCommandOptionType } from "discord-api-types/v10";
 import type { GameDataStore } from "./game-data-store.ts";
-import { escapeMarkdown } from "./lookup.ts";
 import {
   findRecipe,
   itemNamer,

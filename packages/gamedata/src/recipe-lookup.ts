@@ -1,8 +1,13 @@
 // Finding and showing recipes, shared by /recipe and /mats.
-import { type AutocompleteChoice, type CommandReply, maxAutocompleteChoices } from "@nozdormu/core";
+import {
+  type AutocompleteChoice,
+  type CommandReply,
+  escapeMarkdown,
+  maxAutocompleteChoices,
+} from "@nozdormu/core";
 import { MessageFlags } from "discord-api-types/v10";
 import type { GameDataStore } from "./game-data-store.ts";
-import { escapeMarkdown, notLoaded, parseId, toChoices } from "./lookup.ts";
+import { notLoaded, parseId, toChoices } from "./lookup.ts";
 import type { RecipeRecord } from "./recipes.ts";
 
 type RecipeLookupStore = Pick<GameDataStore, "importedBuild" | "getRecipe" | "searchRecipes">;
