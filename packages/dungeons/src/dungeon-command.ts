@@ -9,6 +9,7 @@ import {
   type APIActionRowComponent,
   type APIButtonComponent,
   type APIEmbed,
+  type APIEmbedField,
   ApplicationCommandOptionType,
   ButtonStyle,
   ComponentType,
@@ -102,25 +103,63 @@ function questLines(quest: StoredQuest, maxRewardsShown: number): string {
 
 // The card showing a dungeon's quests, lowest level first, a section each. Quests whose level
 // isn't known come last.
+// Whether Spyglass knows nothing of the quest but its ID and name.
+function isNameOnly(quest: StoredQuest): boolean {
+  return (
+    quest.side === undefined &&
+    quest.className === undefined &&
+    quest.requiredLevel === undefined &&
+    quest.xp === undefined &&
+    quest.objective === undefined &&
+    quest.rewards.length === 0
+  );
+}
+
+// Quests known only by name, linked one after another, as many as fit in a section.
+function nameOnlySection(quests: readonly StoredQuest[]): APIEmbedField {
+  const links = quests.map(
+    (quest) =>
+      `[${escapeMarkdown(quest.name)}](https://www.wowhead.com/forever/quest=${String(quest.id)})`,
+  );
+  let shown = links.length;
+  const text = (count: number): string => {
+    const more = links.length - count;
+    return [...links.slice(0, count), ...(more > 0 ? [`and ${String(more)} more`] : [])].join(
+      " · ",
+    );
+  };
+  while (text(shown).length > maxFieldLength) {
+    shown -= 1;
+  }
+  return { name: "More quests, not scanned in full yet", value: text(shown) };
+}
+
 function questsCard(
   dungeon: StoredDungeon,
   maxRewardsShown: number,
   maxQuestsShown: number,
 ): APIEmbed {
-  const quests = dungeon.quests
+  // Quests known only by name have nothing to show but a link, so they share one last section.
+  const nameOnly = dungeon.quests.filter(isNameOnly);
+  const lastSection = nameOnly.length > 0 ? [nameOnlySection(nameOnly)] : [];
+  const detailed = dungeon.quests.filter((quest) => !isNameOnly(quest));
+  const quests = detailed
     .toSorted(
       (a, b) =>
         (a.requiredLevel ?? Number.POSITIVE_INFINITY) -
         (b.requiredLevel ?? Number.POSITIVE_INFINITY),
     )
-    .slice(0, Math.min(maxQuestsShown, maxFields));
-  const more = dungeon.quests.length - quests.length;
+    .slice(0, Math.min(maxQuestsShown, maxFields - lastSection.length));
+  const more = detailed.length - quests.length;
   return {
     ...heading(dungeon),
-    fields: quests.map((quest) => ({
-      name: quest.name,
-      value: questLines(quest, maxRewardsShown),
-    })),
+    fields: [
+      ...quests.map((quest) => ({
+        name: quest.name,
+        value: questLines(quest, maxRewardsShown),
+      })),
+      ...lastSection,
+    ],
     footer: {
       text: `Quests and their details may be incomplete.${more > 0 ? ` ${String(more)} more quests didn't fit.` : ""}`,
     },
