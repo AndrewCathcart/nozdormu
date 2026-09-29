@@ -4,7 +4,7 @@ import type { FeedReader } from "./feed-reader.ts";
 import type { SeenVideoStore } from "./seen-videos.ts";
 
 // The YouTube channel the alert watches.
-export const scotteJaye = { name: "ScotteJaye", youtubeChannelId: "UCyMNUoiD0vlmFtiriDtVI5Q" };
+const scotteJaye = { name: "ScotteJaye", youtubeChannelId: "UCyMNUoiD0vlmFtiriDtVI5Q" };
 
 export interface YouTubeFeatureDeps {
   // The Discord channel new videos are posted in.
@@ -16,7 +16,7 @@ export interface YouTubeFeatureDeps {
   readonly logger: Pick<Logger, "info">;
 }
 
-export function feedUrl(youtubeChannelId: string): string {
+function feedUrl(youtubeChannelId: string): string {
   return `https://www.youtube.com/feeds/videos.xml?channel_id=${youtubeChannelId}`;
 }
 
@@ -44,9 +44,10 @@ export function createYouTubeFeature(deps: YouTubeFeatureDeps): Feature {
     }
 
     const unseen = videos.filter((video) => !history.seenIds.has(video.id));
-    // An older video that appears (say, after a newer one is deleted) isn't a new upload.
-    const newest = history.newestPublishedAt;
-    const older = unseen.filter((video) => newest !== undefined && video.publishedAt <= newest);
+    // A video no newer than the first check's newest is an old one resurfacing (say, after a newer
+    // one was deleted), not a new upload. Every later upload gets posted and recorded.
+    const baseline = history.baselinePublishedAt;
+    const older = unseen.filter((video) => baseline !== undefined && video.publishedAt <= baseline);
     if (older.length > 0) {
       await deps.seenVideos.markSeen(channelId, older);
       deps.logger.info(
@@ -81,14 +82,23 @@ export function createYouTubeFeature(deps: YouTubeFeatureDeps): Feature {
         failures.push(error);
         continue;
       }
-      await deps.seenVideos.markSeen(channelId, [video]);
+      try {
+        await deps.seenVideos.markSeen(channelId, [video]);
+      } catch (error) {
+        // Posted but not recorded: the next check should find the post among the bot's own.
+        failures.push(error);
+        continue;
+      }
       deps.logger.info(
         { event: "youtube.posted", channel: scotteJaye.name, videoId: video.id },
         "Posted a new YouTube video",
       );
     }
     if (failures.length > 0) {
-      throw new AggregateError(failures, `Couldn't post ${String(failures.length)} new video(s).`);
+      throw new AggregateError(
+        failures,
+        `Couldn't post or record ${String(failures.length)} new video(s).`,
+      );
     }
   };
 

@@ -1,5 +1,5 @@
 {
-  "id": "c1cd6a8e-4a5e-495e-9a50-77f0e68c8593",
+  "id": "e577b8b8-fefe-4f49-a7ee-b096591fd6c0",
   "prevId": "342141e6-832d-42f5-a209-9773a215bbc3",
   "version": "7",
   "dialect": "postgresql",
@@ -91,6 +91,12 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
+        },
+        "baseline_published_at": {
+          "name": "baseline_published_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {},

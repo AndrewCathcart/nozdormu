@@ -78,10 +78,17 @@ const recentMessages = z.array(
   z.object({ author: z.object({ id: z.string() }), content: z.string() }),
 );
 
-export function createRecentPostReader(rest: REST): RecentPostReader {
+export function createRecentPostReader(rest: Pick<REST, "get">): RecentPostReader {
   let botUserId: Promise<string> | undefined;
   return async (channelId) => {
-    botUserId ??= rest.get(Routes.user()).then((body) => currentUser.parse(body).id);
+    // Cached once it succeeds. A failed lookup is forgotten, so the next check tries again.
+    botUserId ??= rest
+      .get(Routes.user())
+      .then((body) => currentUser.parse(body).id)
+      .catch((error: unknown) => {
+        botUserId = undefined;
+        throw error;
+      });
     const [me, messages] = await Promise.all([
       botUserId,
       rest.get(Routes.channelMessages(channelId), { query: new URLSearchParams({ limit: "50" }) }),

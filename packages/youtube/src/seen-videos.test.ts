@@ -16,7 +16,7 @@ describe("seen video store", () => {
     expect(await store.history("UC0000000000000000000001")).toEqual({
       firstCheckDone: true,
       seenIds: new Set(["aaaaaaaaaaa", "bbbbbbbbbbb"]),
-      newestPublishedAt: new Date("2026-09-27T10:00:00Z"),
+      baselinePublishedAt: new Date("2026-09-27T10:00:00Z"),
     });
   });
 
@@ -26,7 +26,7 @@ describe("seen video store", () => {
     expect(await store.history("UC0000000000000000000002")).toEqual({
       firstCheckDone: false,
       seenIds: new Set(),
-      newestPublishedAt: undefined,
+      baselinePublishedAt: undefined,
     });
   });
 
@@ -38,7 +38,7 @@ describe("seen video store", () => {
     expect((await store.history("UC0000000000000000000003")).firstCheckDone).toBe(true);
   });
 
-  it("adds seen videos and moves the newest publish time forward", async () => {
+  it("adds seen videos, keeping the first check's baseline", async () => {
     const store = createSeenVideoStore(database.db);
     await store.recordFirstCheck("UC0000000000000000000004", [older]);
 
@@ -47,7 +47,7 @@ describe("seen video store", () => {
     expect(await store.history("UC0000000000000000000004")).toEqual({
       firstCheckDone: true,
       seenIds: new Set(["aaaaaaaaaaa", "bbbbbbbbbbb"]),
-      newestPublishedAt: new Date("2026-09-27T10:00:00Z"),
+      baselinePublishedAt: new Date("2026-09-26T10:00:00Z"),
     });
   });
 

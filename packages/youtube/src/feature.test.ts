@@ -15,9 +15,15 @@ const videoA = video("aaaaaaaaaaa", "2026-09-26T10:00:00Z");
 const videoB = video("bbbbbbbbbbb", "2026-09-27T10:00:00Z");
 const videoC = video("ccccccccccc", "2026-09-28T10:00:00Z");
 
-// An in-memory store for ScotteJaye's channel.
+function newestOf(videos: readonly SeenVideo[]): Date | undefined {
+  const times = videos.map((v) => v.publishedAt.getTime());
+  return times.length === 0 ? undefined : new Date(Math.max(...times));
+}
+
+// An in-memory store for ScotteJaye's channel. A given history is treated as the first check.
 function createFakeSeenVideos(history?: { readonly seen: readonly Video[] }) {
   let firstCheckDone = history !== undefined;
+  let baselinePublishedAt = newestOf(history?.seen ?? []);
   const seen = new Map<string, SeenVideo>((history?.seen ?? []).map((v) => [v.id, v]));
   const record = (videos: readonly SeenVideo[]): void => {
     for (const v of videos) {
@@ -26,16 +32,11 @@ function createFakeSeenVideos(history?: { readonly seen: readonly Video[] }) {
   };
   return {
     seen,
-    history: (): Promise<ChannelHistory> => {
-      const times = [...seen.values()].map((v) => v.publishedAt.getTime());
-      return Promise.resolve({
-        firstCheckDone,
-        seenIds: new Set(seen.keys()),
-        newestPublishedAt: times.length === 0 ? undefined : new Date(Math.max(...times)),
-      });
-    },
+    history: (): Promise<ChannelHistory> =>
+      Promise.resolve({ firstCheckDone, seenIds: new Set(seen.keys()), baselinePublishedAt }),
     recordFirstCheck: (_channelId, videos) => {
       firstCheckDone = true;
+      baselinePublishedAt = newestOf(videos);
       record(videos);
       return Promise.resolve();
     },
@@ -142,7 +143,7 @@ describe("YouTube alert", () => {
   it("posts a video on a later check if posting it failed", async () => {
     const deps = createDeps([videoB, videoA], { seen: [videoA] });
     deps.publish.mockRejectedValueOnce(new Error("Discord is down"));
-    await expect(pollJob(deps).run()).rejects.toThrow("Couldn't post 1 new video(s).");
+    await expect(pollJob(deps).run()).rejects.toThrow("Couldn't post or record 1 new video(s).");
 
     await pollJob(deps).run();
 
@@ -156,7 +157,7 @@ describe("YouTube alert", () => {
     const deps = createDeps([videoC, videoB, videoA], { seen: [videoA] });
     deps.publish.mockRejectedValueOnce(new Error("AutoMod blocked it"));
 
-    await expect(pollJob(deps).run()).rejects.toThrow("Couldn't post 1 new video(s).");
+    await expect(pollJob(deps).run()).rejects.toThrow("Couldn't post or record 1 new video(s).");
 
     expect([...deps.seenVideos.seen.keys()].toSorted()).toEqual(["aaaaaaaaaaa", "ccccccccccc"]);
   });
@@ -201,5 +202,44 @@ describe("YouTube alert", () => {
       { event: "youtube.first_check", channel: "ScotteJaye", videos: 2 },
       "Recorded the channel's existing videos without posting them",
     );
+  });
+  it("posts a video whose post failed on the next check, even after a newer video was posted", async () => {
+    const deps = createDeps([videoC, videoB, videoA], { seen: [videoA] });
+    deps.publish.mockRejectedValueOnce(new Error("Discord is down"));
+    await expect(pollJob(deps).run()).rejects.toThrow("Couldn't post or record 1 new video(s).");
+
+    await pollJob(deps).run();
+
+    expect(deps.publish.mock.calls.map(([, message]) => message.nonce)).toEqual([
+      "yt-bbbbbbbbbbb",
+      "yt-ccccccccccc",
+      "yt-bbbbbbbbbbb",
+    ]);
+  });
+
+  it("looks for its earlier posts in the alert channel", async () => {
+    const deps = createDeps([videoB, videoA], { seen: [videoA] });
+
+    await pollJob(deps).run();
+
+    expect(deps.recentPosts).toHaveBeenCalledExactlyOnceWith(alertChannelId);
+  });
+  it("keeps posting the other new videos when recording a posted one fails, then fails the check", async () => {
+    const deps = createDeps([videoC, videoB, videoA], { seen: [videoA] });
+    const markSeen = deps.seenVideos.markSeen;
+    let calls = 0;
+    deps.seenVideos.markSeen = (channelId, videos) => {
+      calls += 1;
+      return calls === 1
+        ? Promise.reject(new Error("Database is down"))
+        : markSeen(channelId, videos);
+    };
+
+    await expect(pollJob(deps).run()).rejects.toThrow("Couldn't post or record 1 new video(s).");
+
+    expect(deps.publish.mock.calls.map(([, message]) => message.nonce)).toEqual([
+      "yt-bbbbbbbbbbb",
+      "yt-ccccccccccc",
+    ]);
   });
 });

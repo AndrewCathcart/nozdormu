@@ -3,7 +3,7 @@ import { parseFeed } from "./feed.ts";
 import { buildFeed } from "./test-feed.ts";
 
 describe("parseFeed", () => {
-  it("reads each video's ID, title, link and publish time, in feed order", () => {
+  it("reads each video's ID, link and publish time, in feed order", () => {
     const xml = buildFeed([
       { id: "bbbbbbbbbbb", title: "Second video", published: "2026-09-28T20:00:00+00:00" },
       { id: "aaaaaaaaaaa", title: "First video", published: "2026-09-27T09:30:00+00:00" },

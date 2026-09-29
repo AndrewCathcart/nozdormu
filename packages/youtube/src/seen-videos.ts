@@ -1,5 +1,5 @@
 import { type Database, youtubeChannels, youtubeVideos } from "@nozdormu/db";
-import { eq, max } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 
 export interface SeenVideo {
   readonly id: string;
@@ -10,8 +10,9 @@ export interface SeenVideo {
 export interface ChannelHistory {
   readonly firstCheckDone: boolean;
   readonly seenIds: ReadonlySet<string>;
-  // The newest publish time among the seen videos, if any.
-  readonly newestPublishedAt: Date | undefined;
+  // The newest publish time in the feed at the first check, if it had any videos. An unseen video
+  // no newer than this is an old one resurfacing, not a new upload.
+  readonly baselinePublishedAt: Date | undefined;
 }
 
 export interface SeenVideoStore {
@@ -50,26 +51,27 @@ export function createSeenVideoStore(db: Database): SeenVideoStore {
   return {
     history: async (youtubeChannelId) => {
       const [channel] = await db
-        .select({ id: youtubeChannels.youtubeChannelId })
+        .select({ baselinePublishedAt: youtubeChannels.baselinePublishedAt })
         .from(youtubeChannels)
         .where(eq(youtubeChannels.youtubeChannelId, youtubeChannelId));
       const videos = await db
         .select({ id: youtubeVideos.videoId })
         .from(youtubeVideos)
         .where(eq(youtubeVideos.youtubeChannelId, youtubeChannelId));
-      const [newest] = await db
-        .select({ publishedAt: max(youtubeVideos.publishedAt) })
-        .from(youtubeVideos)
-        .where(eq(youtubeVideos.youtubeChannelId, youtubeChannelId));
       return {
         firstCheckDone: channel !== undefined,
         seenIds: new Set(videos.map((video) => video.id)),
-        newestPublishedAt: newest?.publishedAt ?? undefined,
+        baselinePublishedAt: channel?.baselinePublishedAt ?? undefined,
       };
     },
     recordFirstCheck: async (youtubeChannelId, videos) => {
       await db.transaction(async (tx) => {
-        await tx.insert(youtubeChannels).values({ youtubeChannelId }).onConflictDoNothing();
+        const times = videos.map((video) => video.publishedAt.getTime());
+        const baselinePublishedAt = times.length === 0 ? null : new Date(Math.max(...times));
+        await tx
+          .insert(youtubeChannels)
+          .values({ youtubeChannelId, baselinePublishedAt })
+          .onConflictDoNothing();
         await insertVideos(tx, youtubeChannelId, videos);
       });
     },
