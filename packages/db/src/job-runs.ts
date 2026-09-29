@@ -1,5 +1,5 @@
 import type { JobRunStore } from "@nozdormu/core";
-import { eq, lte } from "drizzle-orm";
+import { eq, lt } from "drizzle-orm";
 import type { Database } from "./client.ts";
 import { jobRuns } from "./schema.ts";
 
@@ -13,17 +13,16 @@ export function createJobRunStore(db: Database): JobRunStore {
       return row?.lastStartedAt;
     },
     // One statement, so it's atomic: the row is inserted, or updated only if the stored run started
-    // at least one interval before this one. Postgres re-checks that condition against the latest
-    // row when two claims race, so only one of them returns a row.
-    claimRun: async (jobName, startedAt, intervalMs) => {
-      const dueIfStartedBy = new Date(startedAt.getTime() - intervalMs);
+    // before the cutoff. Postgres re-checks that condition against the latest row when two claims
+    // race, so only one of them returns a row.
+    claimRun: async (jobName, startedAt, cutoff) => {
       const rows = await db
         .insert(jobRuns)
         .values({ jobName, lastStartedAt: startedAt })
         .onConflictDoUpdate({
           target: jobRuns.jobName,
           set: { lastStartedAt: startedAt },
-          setWhere: lte(jobRuns.lastStartedAt, dueIfStartedBy),
+          setWhere: lt(jobRuns.lastStartedAt, cutoff),
         })
         .returning({ jobName: jobRuns.jobName });
       return rows.length === 1;

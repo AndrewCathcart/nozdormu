@@ -6,20 +6,21 @@ import {
   type SchedulerDeps,
   startScheduler,
 } from "./scheduler.ts";
+import type { WeeklyTime } from "./weekly-time.ts";
 
 const minute = 60_000;
 const start = new Date("2026-09-29T12:00:00Z");
 
 // An in-memory JobRunStore with the same claim rule as the Postgres one: a run can be claimed if
-// the job never ran, or its last run started at least one interval earlier.
+// the job never ran, or its last run started before the cutoff.
 function createFakeStore(lastRuns: Record<string, Date> = {}) {
   const runs = new Map(Object.entries(lastRuns));
   return {
     runs,
     lastRunAt: (jobName) => Promise.resolve(runs.get(jobName)),
-    claimRun: (jobName, startedAt, intervalMs) => {
+    claimRun: (jobName, startedAt, cutoff) => {
       const last = runs.get(jobName);
-      if (last !== undefined && last.getTime() > startedAt.getTime() - intervalMs) {
+      if (last !== undefined && last.getTime() >= cutoff.getTime()) {
         return Promise.resolve(false);
       }
       runs.set(jobName, startedAt);
@@ -38,6 +39,30 @@ function createJob(name: string, intervalMs: number) {
     intervalMs,
     run: vi.fn<ScheduledJob["run"]>().mockResolvedValue(undefined),
   } satisfies ScheduledJob;
+}
+
+// Mondays at 09:00 UK time. The tests start on Tuesday 29 September 2026, during British Summer
+// Time, so the next one is Monday 5 October at 08:00 UTC.
+const mondayMorning = {
+  day: "monday",
+  hour: 9,
+  minute: 0,
+  timeZone: "Europe/London",
+} satisfies WeeklyTime;
+const nextMondayMorning = new Date("2026-10-05T08:00:00Z");
+const lastMondayMorning = new Date("2026-09-28T08:00:00Z");
+
+function createWeeklyJob(name: string, weekly: WeeklyTime) {
+  return {
+    name,
+    weekly,
+    run: vi.fn<ScheduledJob["run"]>().mockResolvedValue(undefined),
+  } satisfies ScheduledJob;
+}
+
+// Moves the fake clock forward to the given moment.
+async function advanceTo(moment: Date): Promise<void> {
+  await vi.advanceTimersByTimeAsync(moment.getTime() - Date.now());
 }
 
 function jobTaking(durationMs: number): () => Promise<undefined> {
@@ -407,8 +432,8 @@ describe("startScheduler", () => {
     await vi.advanceTimersByTimeAsync(10 * minute);
 
     expect(logger.error).toHaveBeenCalledExactlyOnceWith(
-      { event: "job.overrunning", job: "poll", intervalMs: 10 * minute },
-      "A scheduled job is still running after its interval",
+      { event: "job.overrunning", job: "poll", runningMs: 10 * minute },
+      "A scheduled job is still running when its next run is due",
     );
     await vi.advanceTimersByTimeAsync(15 * minute);
     await scheduler.stop();
@@ -440,5 +465,172 @@ describe("startScheduler", () => {
     await stopping;
 
     expect(vi.getTimerCount()).toBe(0);
+  });
+});
+
+describe("startScheduler with a weekly job", () => {
+  it("runs the job at its next weekly time, not when the scheduler starts", async () => {
+    const job = createWeeklyJob("paper", mondayMorning);
+
+    const scheduler = startWith([job]);
+    await advanceTo(new Date(nextMondayMorning.getTime() - 1));
+    expect(job.run).not.toHaveBeenCalled();
+    await advanceTo(nextMondayMorning);
+
+    expect(job.run).toHaveBeenCalledOnce();
+    await scheduler.stop();
+  });
+
+  it("runs the job as soon as it starts when its latest weekly time passed while the bot was down", async () => {
+    const job = createWeeklyJob("paper", mondayMorning);
+    const store = createFakeStore({ paper: new Date("2026-09-21T08:00:00Z") });
+
+    const scheduler = startWith([job], { store });
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(job.run).toHaveBeenCalledOnce();
+    await scheduler.stop();
+  });
+
+  it("waits for next week's time when the job already ran this week", async () => {
+    const job = createWeeklyJob("paper", mondayMorning);
+    const store = createFakeStore({ paper: new Date(lastMondayMorning.getTime() + 1000) });
+
+    const scheduler = startWith([job], { store });
+    await advanceTo(new Date(nextMondayMorning.getTime() - 1));
+    expect(job.run).not.toHaveBeenCalled();
+    await advanceTo(nextMondayMorning);
+
+    expect(job.run).toHaveBeenCalledOnce();
+    await scheduler.stop();
+  });
+
+  it("runs the job every week at the local time, even when the clocks go back", async () => {
+    const job = createWeeklyJob("paper", mondayMorning);
+    // The clocks go back on Sunday 25 October, so that Monday's 09:00 is 09:00 UTC, not 08:00.
+    const mondayAfterClocksGoBack = new Date("2026-10-26T09:00:00Z");
+
+    const scheduler = startWith([job]);
+    await advanceTo(new Date(mondayAfterClocksGoBack.getTime() - 1));
+    expect(job.run).toHaveBeenCalledTimes(3);
+    await advanceTo(mondayAfterClocksGoBack);
+
+    expect(job.run).toHaveBeenCalledTimes(4);
+    await scheduler.stop();
+  });
+
+  it("runs the job once a week even when two processes schedule it", async () => {
+    const store = createFakeStore();
+    const inOldProcess = createWeeklyJob("paper", mondayMorning);
+    const inNewProcess = createWeeklyJob("paper", mondayMorning);
+
+    const schedulers = [startWith([inOldProcess], { store }), startWith([inNewProcess], { store })];
+    await advanceTo(nextMondayMorning);
+
+    expect(inOldProcess.run.mock.calls.length + inNewProcess.run.mock.calls.length).toBe(1);
+    await Promise.all(schedulers.map((scheduler) => scheduler.stop()));
+  });
+
+  it("tries again a minute later when the run can't be claimed, so the week isn't lost", async () => {
+    const job = createWeeklyJob("paper", mondayMorning);
+    const store = createFakeStore();
+    const flakyStore = {
+      ...store,
+      claimRun: vi
+        .fn<JobRunStore["claimRun"]>()
+        .mockRejectedValueOnce(new Error("Database is down")),
+    };
+    flakyStore.claimRun.mockImplementation(store.claimRun);
+
+    const scheduler = startWith([job], { store: flakyStore });
+    await advanceTo(new Date(nextMondayMorning.getTime() + minute - 1));
+    expect(job.run).not.toHaveBeenCalled();
+    await advanceTo(new Date(nextMondayMorning.getTime() + minute));
+
+    expect(job.run).toHaveBeenCalledOnce();
+    await scheduler.stop();
+  });
+
+  it.each([
+    ["one that doesn't exist", "Europe/Atlantis"],
+    ["a fixed offset, which never follows daylight saving", "+01:00"],
+  ])("refuses a time zone that's %s", (_kind, timeZone) => {
+    const job = createWeeklyJob("paper", { ...mondayMorning, timeZone });
+
+    expect(() => startWith([job])).toThrow(
+      new Error(
+        `The job paper can't run weekly: the time zone "${timeZone}" isn't an IANA time zone.`,
+      ),
+    );
+  });
+
+  it.each([
+    [24, 0, "hour 24, minute 0"],
+    [-1, 0, "hour -1, minute 0"],
+    [9, 60, "hour 9, minute 60"],
+    [9.5, 0, "hour 9.5, minute 0"],
+  ])("refuses a time of %s hours and %s minutes", (hour, minutes, described) => {
+    const job = createWeeklyJob("paper", { ...mondayMorning, hour, minute: minutes });
+
+    expect(() => startWith([job])).toThrow(
+      new Error(
+        `The job paper can't run weekly: ${described} isn't a time of day (the hour must be a whole number from 0 to 23, and the minute from 0 to 59).`,
+      ),
+    );
+  });
+
+  it("logs a run still going when next week's run is due", async () => {
+    const job = createWeeklyJob("paper", mondayMorning);
+    const run = Promise.withResolvers<undefined>();
+    job.run.mockReturnValue(run.promise);
+    const logger = createFakeLogger();
+    const week = 7 * 24 * 60 * minute;
+
+    const scheduler = startWith([job], { logger });
+    await advanceTo(new Date(nextMondayMorning.getTime() + week - 1));
+    expect(logger.error).not.toHaveBeenCalled();
+    await advanceTo(new Date(nextMondayMorning.getTime() + week));
+
+    expect(logger.error).toHaveBeenCalledExactlyOnceWith(
+      { event: "job.overrunning", job: "paper", runningMs: week },
+      "A scheduled job is still running when its next run is due",
+    );
+    run.resolve(undefined);
+    await scheduler.stop();
+  });
+
+  it("runs a new job once when its timer fires a moment before the weekly time", async () => {
+    const job = createWeeklyJob("paper", mondayMorning);
+    const scheduler = startWith([job]);
+    await advanceTo(new Date(nextMondayMorning.getTime() - 10));
+
+    // Node's timers don't follow the wall clock exactly, so a timer can fire when Date.now() is
+    // still a millisecond short of the time it was set for.
+    vi.setSystemTime(new Date(Date.now() - 1));
+    await vi.advanceTimersByTimeAsync(minute);
+
+    expect(job.run).toHaveBeenCalledOnce();
+    await scheduler.stop();
+  });
+
+  it("looks up the last run again a minute later when it can't be looked up at startup", async () => {
+    const job = createWeeklyJob("paper", mondayMorning);
+    const store = createFakeStore();
+    const flakyStore = {
+      ...store,
+      lastRunAt: vi
+        .fn<JobRunStore["lastRunAt"]>()
+        .mockRejectedValueOnce(new Error("Database is down")),
+    };
+    flakyStore.lastRunAt.mockImplementation(store.lastRunAt);
+
+    const scheduler = startWith([job], { store: flakyStore });
+    await vi.advanceTimersByTimeAsync(minute);
+
+    expect(flakyStore.lastRunAt).toHaveBeenCalledTimes(2);
+    expect(job.run).not.toHaveBeenCalled();
+    await advanceTo(nextMondayMorning);
+    expect(job.run).toHaveBeenCalledOnce();
+    await scheduler.stop();
   });
 });
