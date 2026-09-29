@@ -9,7 +9,7 @@ This section overrides Andy's global `~/.claude/CLAUDE.md` where they differ.
 - Use only two Matt Pocock skills: `mattpocock-skills:tdd` and `mattpocock-skills:code-review`.
 - Don't use the planning chain (`/setup-matt-pocock-skills`, `/grill-me`, `/grill-with-docs`, `/to-spec`, `/to-tickets`, `/implement`, `/triage`, `/wayfinder`) or any other Matt Pocock skill, such as `diagnosing-bugs`, `codebase-design`, `domain-modeling`, `research` or `prototype`, unless Andy asks for it.
 - Every PR description starts with its spec: 3–6 plain bullets saying what the change should do, not how, written before any code. TDD writes tests from that list, and code review checks the code against it. Link the issue with `Closes #n`.
-- Agree the test boundaries with Andy before writing tests.
+- Work autonomously. Choose the test boundaries yourself and list them in the PR description; don't wait for Andy to agree them. Only stop for things only Andy can do (accounts, secrets, payments, running a slash command as a real user) or decisions that are genuinely his. Batch those into one short list.
 - The global TypeScript standards and testing rules still apply. So do the bug-fixing rules (reproduce it first, name the cause, land a regression test), without the `diagnosing-bugs` skill.
 - Track work in GitHub Issues: one issue per feature, with no labels, milestones or boards. Ideas live in the backlog issue until they're picked up.
 - Use the `gh` CLI for GitHub.
@@ -45,22 +45,23 @@ Prefer the latest versions that work together, and fast tools. The choices below
 
 Built so far:
 
-- `packages/core` holds the feature registry (`createRegistry`). It collects every feature's command definitions for Discord, and dispatches each command to its handler. An unknown command is logged and returns a result instead of throwing. Keep the core thin.
+- `apps/bot` is the process. `src/main.ts` loads config (`loadConfig` validates the environment and names bad settings without echoing values), builds the registry from `createFeatures()`, registers commands, connects to the gateway, and disconnects cleanly on SIGINT or SIGTERM. If Discord rejects a well-formed setting, `explainRejectedSetting` turns the error into a message naming it.
+- `packages/core` holds the feature registry (`createRegistry`), the Discord adapter (`registerGuildCommands`, `routeInteractions`) and `serializeError`. The registry refuses duplicate command names and dispatches each command to its handler. Every dispatch result carries the reply to send: an unknown command or a handler that throws gets a private error reply and a log entry, never a crash. The adapter sends that reply through Discord's interaction callback. Keep the core thin.
 - `packages/ping` is the `/ping` feature.
 - Each feature package exports a factory, such as `createPingFeature()`, that takes the feature's injected dependencies (Discord client, database, Claude client, clock) and returns a `Feature`. Command handlers take a parsed `CommandInvocation` and return a `Promise<CommandReply>`. That's the main testing seam.
 - Internal packages are source-only: `exports` points at `src/*.ts`, and dependents use `workspace:*`. Shared dependency versions live in the `catalog` in `pnpm-workspace.yaml`.
 
 Planned:
 
-- `apps/bot` is the process. It connects to the gateway, loads the feature packages and starts the scheduler.
 - `packages/db` holds the schema and migrations.
-- The core gains the Discord adapters and the scheduler. Features also export autocomplete handlers, event handlers and scheduled jobs.
+- The core gains the scheduler, and the bot starts it. Features also export autocomplete handlers, event handlers and scheduled jobs.
 
 ## Discord
 
 - Two Discord applications. "Nozdormu Dev" runs locally, installed in a private test server. "Nozdormu" runs on Railway, installed in the guild server.
 - Slash commands arrive over the gateway, so there's no public endpoint and no tunnel.
-- On startup, bulk-overwrite the guild's commands (`PUT /applications/{id}/guilds/{guild}/commands`), but only when a stored hash of the command definitions has changed. Discord allows 200 command creates per day per guild.
+- On startup, bulk-overwrite the guild's commands (`PUT /applications/{id}/guilds/{guild}/commands`). For now this happens on every startup. Once there's a database, only do it when a stored hash of the command definitions has changed. Discord allows 200 command creates per day per guild.
+- The bot's settings are listed in `.env.example`. Locally they live in a gitignored `.env` at the repo root, which the bot's scripts load with Node's `--env-file-if-exists`.
 - Autocomplete returns at most 25 choices within 3 seconds.
 - Anything slower than 3 seconds defers its reply, then edits it within the 15-minute interaction window.
 - Request only the gateway intents that a feature needs.
@@ -81,26 +82,32 @@ Planned:
 ## Commands
 
 - `pnpm check` runs everything CI runs: format check, lint, typecheck and tests.
+- `pnpm dev` runs the bot against the Dev app and restarts it on changes. `pnpm start` runs it once.
+- `pnpm smoke` starts the bot, waits for its ready log line, checks through Discord's API that its commands are registered, then stops it.
 - `pnpm fmt` formats every file. `pnpm lint`, `pnpm typecheck` and `pnpm test` run one step each.
 - `pnpm test <path>` runs a single test file.
 - lefthook formats and lints staged files on each commit.
 
 ## Verifying work
 
-Tests are the minimum. Before calling a change done, run `pnpm check`, and check the change against the real thing. Planned, as the bot is built:
+Tests are the minimum. Before calling a change done, run `pnpm check` and `pnpm smoke`, and check the change against the real thing.
+
+- Logs are pino JSON lines with a named `event`, plus durations and counts, and never message content or secrets. After a deploy, read them with `railway logs`.
+- Log errors under the `err` key, and never log a raw error object any other way. The bot's logger passes `err` through `serializeError`, which keeps only the error's name, message, stack, HTTP status and code. Discord's request errors also carry the request URL, which can hold an interaction token, and the request body, which can hold message content.
+- Only a real user can run a slash command. Never drive Andy's Discord account in the Discord app or web client; that's a self-bot, which Discord's terms forbid. At milestones, ask Andy to run the command in the test server. You can read back what the bot posted through the bot's own API access. The Developer Portal is fine to drive when Andy asks, but never reveal or copy a token or secret there; Andy handles those.
+
+Planned, as the bot is built:
 
 - Run migrations against local Postgres the way Railway's pre-deploy command will.
-- Smoke-run the dev bot: start it, wait for its ready log line, confirm through Discord's API that its commands are registered, then stop it.
 - Scheduled jobs have a dry-run mode that uses the real external source and prints what it would post instead of posting it.
-- Logs are structured, with named events, durations and counts, and never message content. After a deploy, read them with `railway logs`.
-- Only a real user can run a slash command. Never drive Andy's Discord account through the browser; that's a self-bot, which Discord's terms forbid. At milestones, ask Andy to run the command in the test server. You can read back what the bot posted through the bot's own API access.
 
 ## CI and deploy
 
 - GitHub Actions (`.github/workflows/ci.yml`) runs `pnpm check` on every PR and every push to `main`, in one job with the pnpm store cached. Actions are pinned to commit SHAs, and Renovate keeps them current.
+- A ruleset on `main` requires the `check` job to pass, and blocks force-pushes and deleting the branch. Every change reaches `main` through a PR.
 
 Planned:
 
-- A ruleset on `main` requires CI to pass.
 - On push to `main`, after CI passes, a deploy job runs `railway up` with a Railway project token, in a `production` environment with a concurrency group. Don't rely on Railway's "Wait for CI" setting instead.
 - Railway service settings live in `railway.toml`, which overrides the dashboard.
+- Railway stops the old deployment with SIGTERM, then SIGKILL. Start the bot with `node` directly, not through `pnpm`, so the signal reaches it. Set `drainingSeconds` so `client.destroy()` has time to finish; Railway's docs don't state the default, and one report says it's 0.
