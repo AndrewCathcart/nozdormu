@@ -1,5 +1,6 @@
 import { useTestDatabase } from "@nozdormu/db/testing";
 import { describe, expect, it } from "vitest";
+import type { ClassSpell } from "./class-spells.ts";
 import type { ItemRecord } from "./item-sparse.ts";
 import type { RecipeRecord } from "./recipes.ts";
 import { createGameDataStore, type GameDataStore } from "./game-data-store.ts";
@@ -16,8 +17,23 @@ function importBuild(
   items: ItemRecord[],
   recipes: RecipeRecord[] = [],
   format = 2,
+  classSpells: ClassSpell[] = [],
 ): Promise<void> {
-  return store.replaceBuild({ version, format, items, recipes });
+  return store.replaceBuild({ version, format, items, recipes, classSpells });
+}
+
+// A made-up warrior (class 1) spell at Rank 1, learned by every race.
+// Imports a build with these class spells and nothing else.
+function importClassSpells(
+  store: GameDataStore,
+  classSpells: ClassSpell[],
+  version = "1.60.1.1101",
+): Promise<void> {
+  return importBuild(store, version, [], [], 4, classSpells);
+}
+
+function classSpell(spellId: number, name: string, level: number, classId = 1): ClassSpell {
+  return { spellId, classId, level, name, rank: 1, races: [] };
 }
 
 // A made-up recipe making item 1 from items 2 and 3.
@@ -321,5 +337,52 @@ describe("game data store", () => {
     const found = await store.searchItems("fishing line", 25);
 
     expect(found.map((match) => match.name)).toEqual(["Made-up High Test Fishing Line"]);
+  });
+
+  it("lists what a class learns at a level, by name, keeping ranks and races", async () => {
+    const store = createGameDataStore(database.db);
+    const starshards = {
+      ...classSpell(800_003, "Made-up Starshards", 10),
+      rank: undefined,
+      races: ["Night Elf"],
+    };
+    await importClassSpells(store, [
+      classSpell(800_001, "Made-up Strike", 10),
+      classSpell(800_002, "Made-up Shout", 12),
+      starshards,
+      classSpell(800_004, "Made-up Bolt", 10, 8),
+    ]);
+
+    expect(await store.classSpellsAt(1, 10)).toEqual([
+      starshards,
+      classSpell(800_001, "Made-up Strike", 10),
+    ]);
+  });
+
+  it("finds the next level at which a class learns something", async () => {
+    const store = createGameDataStore(database.db);
+    await importClassSpells(store, [
+      classSpell(800_001, "Made-up Strike", 10),
+      classSpell(800_002, "Made-up Shout", 14),
+      classSpell(800_004, "Made-up Bolt", 12, 8),
+    ]);
+
+    expect(await store.nextClassSpellLevel(1, 10)).toBe(14);
+  });
+
+  it("finds no next level after a class's last new spells", async () => {
+    const store = createGameDataStore(database.db);
+    await importClassSpells(store, [classSpell(800_002, "Made-up Shout", 14)]);
+
+    expect(await store.nextClassSpellLevel(1, 14)).toBeUndefined();
+  });
+
+  it("replaces the previous build's class spells", async () => {
+    const store = createGameDataStore(database.db);
+    await importClassSpells(store, [classSpell(800_001, "Made-up Strike", 10)]);
+
+    await importClassSpells(store, [classSpell(800_002, "Made-up Shout", 10)], "1.60.1.1102");
+
+    expect(await store.classSpellsAt(1, 10)).toEqual([classSpell(800_002, "Made-up Shout", 10)]);
   });
 });

@@ -10,8 +10,10 @@ import type { GameDataStore } from "./game-data-store.ts";
 import type { ItemRecord } from "./item-sparse.ts";
 import type { RecipeRecord, RecipeTable } from "./recipes.ts";
 import {
+  classSpellTablesCsv,
   csv,
   itemSparseCsv,
+  mergeCsv,
   reagentHeader,
   recipeTablesCsv,
   spellEffectHeader,
@@ -36,19 +38,30 @@ const firstSwordRecipe: RecipeRecord = {
   taughtBy: [],
 };
 
-// A source whose builds have this many items and recipes.
+// A source whose builds have this many items, recipes and class spells (500 unless given).
 function fakeTables(
   itemCount: number,
   recipeCount: number,
   overrides: Partial<Record<RecipeTable, string>> = {},
+  classSpellCount = 500,
 ) {
   const recipeTables = { ...recipeTablesCsv(recipeCount), ...overrides };
+  const classTables = classSpellTablesCsv(classSpellCount);
+  const tables: Record<Exclude<GameTable, "ItemSparse">, string> = {
+    ...classTables,
+    ...recipeTables,
+    // Recipes and class spells share these.
+    SkillLine: mergeCsv(recipeTables.SkillLine, classTables.SkillLine),
+    SkillLineAbility: mergeCsv(recipeTables.SkillLineAbility, classTables.SkillLineAbility),
+    SpellName: mergeCsv(recipeTables.SpellName, classTables.SpellName),
+    SpellEffect: mergeCsv(recipeTables.SpellEffect, classTables.SpellEffect),
+  };
   return (name: GameTable): Promise<string> =>
-    Promise.resolve(name === "ItemSparse" ? itemSparseCsv(itemCount) : recipeTables[name]);
+    Promise.resolve(name === "ItemSparse" ? itemSparseCsv(itemCount) : tables[name]);
 }
 
-// Downloads have 1,000 items and 1,000 recipes, the fewest the job accepts. The imported build, if
-// any, was stored by the current import code unless a format is given.
+// Downloads have 1,000 items, 1,000 recipes and 500 class spells, the fewest the job accepts. The
+// imported build, if any, was stored by the current import code unless a format is given.
 function createDeps(latest: string, imported?: string, format = importFormat) {
   return {
     source: {
@@ -66,20 +79,27 @@ function createDeps(latest: string, imported?: string, format = importFormat) {
 }
 
 describe("build check", () => {
-  it("downloads a new Forever build's item and recipe tables", async () => {
+  it("downloads each of a new Forever build's tables once", async () => {
     const deps = createDeps("1.60.1.70009", "1.60.1.69893");
 
     await createBuildCheckJob(deps).run();
 
     expect(deps.source.table.mock.calls.toSorted(([a], [b]) => a.localeCompare(b))).toEqual([
+      ["CharBaseInfo", "1.60.1.70009"],
+      ["ChrRaces", "1.60.1.70009"],
       ["ItemEffect", "1.60.1.70009"],
       ["ItemSparse", "1.60.1.70009"],
       ["ItemXItemEffect", "1.60.1.70009"],
       ["SkillLine", "1.60.1.70009"],
       ["SkillLineAbility", "1.60.1.70009"],
+      ["SkillRaceClassInfo", "1.60.1.70009"],
+      ["Spell", "1.60.1.70009"],
       ["SpellEffect", "1.60.1.70009"],
+      ["SpellLevels", "1.60.1.70009"],
+      ["SpellMisc", "1.60.1.70009"],
       ["SpellName", "1.60.1.70009"],
       ["SpellReagents", "1.60.1.70009"],
+      ["Talent", "1.60.1.70009"],
     ]);
   });
 
@@ -106,6 +126,23 @@ describe("build check", () => {
     expect(recipes).toHaveLength(1000);
     expect(recipes?.[0]).toEqual(firstSwordRecipe);
     expect(recipes?.[999]?.name).toBe("Made-up Sword 1000");
+  });
+
+  it("imports the class trainer spells of a new Forever build", async () => {
+    const deps = createDeps("1.60.1.70009", "1.60.1.69893");
+
+    await createBuildCheckJob(deps).run();
+
+    const classSpells = deps.store.replaceBuild.mock.calls[0]?.[0].classSpells;
+    expect(classSpells).toHaveLength(500);
+    expect(classSpells?.[0]).toEqual({
+      spellId: 800_001,
+      classId: 1,
+      level: 1,
+      name: "Made-up Strike 1",
+      rank: 1,
+      races: [],
+    });
   });
 
   // The client still lists recipes, mostly Season of Discovery's, whose items Forever doesn't have.
@@ -190,7 +227,7 @@ describe("build check", () => {
 
     await createBuildCheckJob(deps).run();
 
-    expect(deps.store.replaceBuild.mock.calls[0]?.[0].format).toBe(3);
+    expect(deps.store.replaceBuild.mock.calls[0]?.[0].format).toBe(4);
   });
 
   it("ignores a build that isn't Forever's", async () => {
@@ -221,6 +258,7 @@ describe("build check", () => {
         version: "1.60.1.70009",
         items: 1000,
         recipes: 1000,
+        classSpells: 500,
       }),
       "Imported a new game build",
     );
@@ -243,6 +281,17 @@ describe("build check", () => {
 
     await expect(createBuildCheckJob(deps).run()).rejects.toThrow(
       "wago.tools gave only 999 recipes for build 1.60.1.70009, so the stored game data was kept.",
+    );
+
+    expect(deps.store.replaceBuild).not.toHaveBeenCalled();
+  });
+
+  it("refuses a build with fewer than 500 class spells, keeping the stored data", async () => {
+    const deps = createDeps("1.60.1.70009", "1.60.1.69893");
+    deps.source.table.mockImplementation(fakeTables(1000, 1000, {}, 499));
+
+    await expect(createBuildCheckJob(deps).run()).rejects.toThrow(
+      "wago.tools gave only 499 class spells for build 1.60.1.70009, so the stored game data was kept.",
     );
 
     expect(deps.store.replaceBuild).not.toHaveBeenCalled();
