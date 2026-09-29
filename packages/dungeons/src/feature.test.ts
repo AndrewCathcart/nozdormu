@@ -2,7 +2,8 @@ import type { Logger, ScheduledJob } from "@nozdormu/core";
 import { describe, expect, it, vi } from "vitest";
 import type { DungeonStore } from "./dungeon-store.ts";
 import { createDungeonFeature, type DungeonFeatureDeps } from "./feature.ts";
-import type { Dungeon, ScannedItem, SpyglassData, SpyglassReader } from "./spyglass.ts";
+import type { ScannedItem } from "@nozdormu/gamedata";
+import type { Dungeon, SpyglassData, SpyglassReader } from "./spyglass.ts";
 
 // Made-up dungeons, each with one boss and one quest.
 function dungeons(count: number): Dungeon[] {

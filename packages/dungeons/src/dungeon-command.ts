@@ -23,7 +23,7 @@ import {
   type StoredLootItem,
   type StoredQuest,
 } from "./dungeon-store.ts";
-import { itemDetails } from "./item-text.ts";
+import { itemDetails } from "@nozdormu/gamedata";
 import type { Faction } from "./spyglass.ts";
 
 // Discord's limits on a card: its sections, each section's text, and the whole card's text.

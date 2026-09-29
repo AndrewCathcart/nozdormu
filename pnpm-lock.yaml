@@ -364,6 +364,9 @@ importers:
       '@nozdormu/db':
         specifier: workspace:*
         version: link:../db
+      '@nozdormu/gamedata':
+        specifier: workspace:*
+        version: link:../gamedata
       discord-api-types:
         specifier: 'catalog:'
         version: 0.38.55

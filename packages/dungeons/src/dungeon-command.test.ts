@@ -3,7 +3,7 @@ import { type APIEmbed, MessageFlags } from "discord-api-types/v10";
 import { describe, expect, it, vi } from "vitest";
 import { createDungeonCommand } from "./dungeon-command.ts";
 import type { DungeonStore, StoredDungeon, StoredLootItem } from "./dungeon-store.ts";
-import type { ScannedItem } from "./spyglass.ts";
+import type { ScannedItem } from "@nozdormu/gamedata";
 
 const hollow: StoredDungeon = {
   name: "The Made-up Hollow",

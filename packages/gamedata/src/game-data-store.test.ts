@@ -1,8 +1,10 @@
+import { scannedItems, scannedItemStats } from "@nozdormu/db";
 import { useTestDatabase } from "@nozdormu/db/testing";
 import { describe, expect, it } from "vitest";
 import type { ClassSpell } from "./class-spells.ts";
 import type { ItemRecord } from "./item-sparse.ts";
 import type { RecipeRecord } from "./recipes.ts";
+import type { ScannedItem } from "./scanned-item.ts";
 import { createGameDataStore, type GameDataStore } from "./game-data-store.ts";
 
 const database = useTestDatabase();
@@ -20,6 +22,46 @@ function importBuild(
   classSpells: ClassSpell[] = [],
 ): Promise<void> {
   return store.replaceBuild({ version, format, items, recipes, classSpells });
+}
+
+// A made-up rare leather belt, as the game was scanned.
+function scannedBelt(id: number, name: string): ScannedItem {
+  return {
+    id,
+    name,
+    quality: 3,
+    itemLevel: 18,
+    requiredLevel: 13,
+    itemClass: 4,
+    itemSubclass: 2,
+    slot: "INVTYPE_WAIST",
+    stats: [
+      { stat: "RESISTANCE0_NAME", value: 37 },
+      { stat: "STAMINA", value: 4 },
+    ],
+  };
+}
+
+// Replaces the scanned items, which the dungeon sync stores, with these.
+async function storeScannedItems(scanned: readonly ScannedItem[]): Promise<void> {
+  await database.db.delete(scannedItems);
+  if (scanned.length === 0) {
+    return;
+  }
+  await database.db
+    .insert(scannedItems)
+    .values(scanned.map(({ stats: _stats, ...fields }) => fields));
+  const stats = scanned.flatMap((scannedItem) =>
+    scannedItem.stats.map(({ stat, value }, position) => ({
+      itemId: scannedItem.id,
+      position,
+      stat,
+      value,
+    })),
+  );
+  if (stats.length > 0) {
+    await database.db.insert(scannedItemStats).values(stats);
+  }
 }
 
 // A made-up warrior (class 1) spell at Rank 1, learned by every race.
@@ -286,7 +328,8 @@ describe("game data store", () => {
       item(4, "Made-up Helm"),
     ]);
 
-    const found = await store.searchItems("sword", 25);
+    await storeScannedItems([]);
+    const found = await store.findItems("sword", 25);
 
     expect(found.map((match) => match.name)).toEqual([
       "Sword-shaped Made-up Charm",
@@ -305,7 +348,9 @@ describe("game data store", () => {
       ),
     );
 
-    expect(await store.searchItems("ring", 25)).toHaveLength(25);
+    await storeScannedItems([]);
+
+    expect(await store.findItems("ring", 25)).toHaveLength(25);
   });
 
   it("matches % and _ in the text literally", async () => {
@@ -315,7 +360,8 @@ describe("game data store", () => {
       item(2, "Made-up Elixir"),
     ]);
 
-    const found = await store.searchItems("%", 25);
+    await storeScannedItems([]);
+    const found = await store.findItems("%", 25);
 
     expect(found.map((match) => match.name)).toEqual(["Made-up 50% Potion"]);
   });
@@ -333,7 +379,8 @@ describe("game data store", () => {
       item(8, "Made-up Bladetester"),
     ]);
 
-    const found = await store.searchItems("blade", 25);
+    await storeScannedItems([]);
+    const found = await store.findItems("blade", 25);
 
     expect(found.map((match) => match.name)).toEqual(["Made-up Blade", "Made-up Bladetester"]);
   });
@@ -342,7 +389,8 @@ describe("game data store", () => {
     const store = createGameDataStore(database.db);
     await importBuild(store, "1.60.1.1010", [item(1, "Made-up High Test Fishing Line")]);
 
-    const found = await store.searchItems("fishing line", 25);
+    await storeScannedItems([]);
+    const found = await store.findItems("fishing line", 25);
 
     expect(found.map((match) => match.name)).toEqual(["Made-up High Test Fishing Line"]);
   });
@@ -392,5 +440,86 @@ describe("game data store", () => {
     await importClassSpells(store, [classSpell(800_002, "Made-up Shout", 10)], "1.60.1.1102");
 
     expect(await store.classSpellsAt(1, 10)).toEqual([classSpell(800_002, "Made-up Shout", 10)]);
+  });
+
+  it("finds items in the client's table and among the scanned items alike, each once", async () => {
+    const store = createGameDataStore(database.db);
+    await importBuild(store, "1.60.1.1201", [item(1, "Made-up Belt"), item(3, "Made-up Helm")]);
+    await storeScannedItems([
+      scannedBelt(1, "Made-up Belt"),
+      scannedBelt(2, "Made-up Belt of Forever"),
+    ]);
+
+    const found = await store.findItems("belt", 25);
+
+    expect(found.map((entry) => [entry.id, entry.name])).toEqual([
+      [1, "Made-up Belt"],
+      [2, "Made-up Belt of Forever"],
+    ]);
+  });
+
+  it("gives an item as scanned in the game, where it was, over the client's table", async () => {
+    const store = createGameDataStore(database.db);
+    await importBuild(store, "1.60.1.1202", [item(1, "Made-up Belt")]);
+    await storeScannedItems([scannedBelt(1, "Made-up Belt")]);
+
+    expect(await store.lookUpItem(1)).toEqual({
+      id: 1,
+      name: "Made-up Belt",
+      quality: 3,
+      itemLevel: 18,
+      requiredLevel: 13,
+      slot: "INVTYPE_WAIST",
+      scanned: scannedBelt(1, "Made-up Belt"),
+    });
+  });
+
+  it("gives an item only the client's table has, with its slot by the game's name", async () => {
+    const store = createGameDataStore(database.db);
+    await importBuild(store, "1.60.1.1203", [item(3, "Made-up Dagger")]);
+    await storeScannedItems([]);
+
+    expect(await store.lookUpItem(3)).toEqual({
+      id: 3,
+      name: "Made-up Dagger",
+      quality: 2,
+      itemLevel: 20,
+      requiredLevel: 15,
+      slot: "INVTYPE_WEAPON",
+      scanned: undefined,
+    });
+  });
+
+  it("leaves deprecated and test items out of searches among the scanned items too", async () => {
+    const store = createGameDataStore(database.db);
+    await importBuild(store, "1.60.1.1204", []);
+    await storeScannedItems([
+      scannedBelt(1, "Made-up Belt"),
+      scannedBelt(2, "Made-up Belt (Test)"),
+      scannedBelt(3, "Made-up Belt DEPRECATED"),
+    ]);
+
+    const found = await store.findItems("belt", 25);
+
+    expect(found.map((entry) => entry.name)).toEqual(["Made-up Belt"]);
+  });
+
+  it("finds the best matches first when more items match than asked for", async () => {
+    const store = createGameDataStore(database.db);
+    await importBuild(store, "1.60.1.1205", [
+      ...Array.from({ length: 30 }, (_, index) =>
+        item(index + 1, `Made-up Ring ${String(index + 1)}`),
+      ),
+      item(31, "Ring of Made-up Things"),
+    ]);
+    await storeScannedItems([scannedBelt(32, "Ring of the Made-up Scan")]);
+
+    const found = await store.findItems("ring", 3);
+
+    expect(found.map((entry) => entry.name)).toEqual([
+      "Ring of Made-up Things",
+      "Ring of the Made-up Scan",
+      "Made-up Ring 1",
+    ]);
   });
 });

@@ -8,15 +8,9 @@ import {
   scannedItems,
   scannedItemStats,
 } from "@nozdormu/db";
-import { asc, eq, inArray } from "drizzle-orm";
-import {
-  type Dungeon,
-  faction,
-  type LootItem,
-  type Quest,
-  type ScannedItem,
-  type SpyglassData,
-} from "./spyglass.ts";
+import { readScannedItems, type ScannedItem } from "@nozdormu/gamedata";
+import { asc, eq } from "drizzle-orm";
+import { type Dungeon, faction, type LootItem, type Quest, type SpyglassData } from "./spyglass.ts";
 
 // A loot item, with its scanned details where Spyglass has scanned it.
 export interface StoredLootItem extends LootItem {
@@ -69,32 +63,8 @@ async function insertInBatches<Row>(
 }
 
 export function createDungeonStore(db: Database): DungeonStore {
-  // The scanned details of these items, by ID.
-  const scannedById = async (ids: readonly number[]): Promise<Map<number, ScannedItem>> => {
-    if (ids.length === 0) {
-      return new Map();
-    }
-    const items = await db
-      .select()
-      .from(scannedItems)
-      .where(inArray(scannedItems.id, [...ids]));
-    const stats = await db
-      .select()
-      .from(scannedItemStats)
-      .where(inArray(scannedItemStats.itemId, [...ids]))
-      .orderBy(asc(scannedItemStats.position));
-    return new Map(
-      items.map((item) => [
-        item.id,
-        {
-          ...item,
-          stats: stats
-            .filter((row) => row.itemId === item.id)
-            .map(({ stat, value }) => ({ stat, value })),
-        },
-      ]),
-    );
-  };
+  const scannedById = (ids: readonly number[]): Promise<Map<number, ScannedItem>> =>
+    readScannedItems(db, ids);
 
   return {
     replaceAll: async ({ build, dungeons: syncedDungeons, items }) => {
