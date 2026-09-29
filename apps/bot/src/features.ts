@@ -8,10 +8,8 @@ import {
 import {
   createCalendarFeature,
   createPostedReminderStore,
-  createScheduledEvents,
   foreverMilestones,
   type PostedReminderStore,
-  type ScheduledEvents,
 } from "@nozdormu/calendar";
 import {
   type ChannelPublisher,
@@ -73,7 +71,6 @@ export interface FeatureDeps {
   readonly logger: Pick<Logger, "info" | "warn">;
   readonly now: () => Date;
   readonly postedReminders: PostedReminderStore;
-  readonly scheduledEvents: ScheduledEvents;
   readonly readSpyglass: SpyglassReader;
   readonly dungeonStore: DungeonStore;
 }
@@ -97,7 +94,6 @@ export function createFeatureDeps(
     seenStaffPosts: createSeenPostStore(db),
     now: () => new Date(),
     postedReminders: createPostedReminderStore(db),
-    scheduledEvents: createScheduledEvents(rest, config.discord.guildId),
     readSpyglass: createSpyglassReader({ fetch }),
     dungeonStore: createDungeonStore(db),
   };
@@ -135,9 +131,7 @@ export function createFeatures(deps: FeatureDeps): Feature[] {
       milestones: foreverMilestones,
       now: deps.now,
       posted: deps.postedReminders,
-      events: deps.scheduledEvents,
       publish: deps.publish,
-      recentPosts: deps.recentPosts,
       logger: deps.logger,
     }),
     createDungeonFeature({

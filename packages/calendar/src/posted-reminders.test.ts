@@ -4,6 +4,7 @@ import { createPostedReminderStore } from "./posted-reminders.ts";
 
 const database = useTestDatabase();
 
+// Each test uses its own keys, since they share one database.
 describe("posted reminder store", () => {
   it("gives the keys of the reminders posted", async () => {
     const store = createPostedReminderStore(database.db);
@@ -11,7 +12,10 @@ describe("posted reminder store", () => {
     await store.markPosted("made-up-week");
     await store.markPosted("made-up-day");
 
-    expect(await store.postedKeys()).toEqual(new Set(["made-up-week", "made-up-day"]));
+    const posted = await store.postedKeys();
+    expect(
+      ["made-up-week", "made-up-day", "made-up-never"].filter((key) => posted.has(key)),
+    ).toEqual(["made-up-week", "made-up-day"]);
   });
 
   it("records a reminder posted twice without failing", async () => {
@@ -20,8 +24,6 @@ describe("posted reminder store", () => {
 
     await store.markPosted("made-up-twice");
 
-    expect([...(await store.postedKeys())].filter((key) => key === "made-up-twice")).toEqual([
-      "made-up-twice",
-    ]);
+    expect((await store.postedKeys()).has("made-up-twice")).toBe(true);
   });
 });
