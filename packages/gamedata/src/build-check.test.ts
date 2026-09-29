@@ -2,7 +2,7 @@ import type { Logger } from "@nozdormu/core";
 import { describe, expect, it, vi } from "vitest";
 import { createBuildCheckJob, type GameDataSource } from "./build-check.ts";
 import type { ItemRecord } from "./item-sparse.ts";
-import type { ItemStore } from "./item-store.ts";
+import type { GameDataStore } from "./game-data-store.ts";
 
 // A made-up ItemSparse export: swords numbered from 1, with IDs from 270001.
 function itemSparseCsv(itemCount: number): string {
@@ -29,13 +29,13 @@ function createDeps(latest: string, imported?: string) {
   return {
     source: {
       latestBuild: vi.fn<GameDataSource["latestBuild"]>().mockResolvedValue(latest),
-      itemSparse: vi.fn<GameDataSource["itemSparse"]>().mockResolvedValue(itemSparseCsv(1000)),
+      table: vi.fn<GameDataSource["table"]>().mockResolvedValue(itemSparseCsv(1000)),
     },
-    items: {
-      importedVersion: vi.fn<ItemStore["importedVersion"]>().mockResolvedValue(imported),
-      replaceAll: vi.fn<ItemStore["replaceAll"]>().mockResolvedValue(undefined),
-      get: vi.fn<ItemStore["get"]>(),
-      search: vi.fn<ItemStore["search"]>(),
+    store: {
+      importedVersion: vi.fn<GameDataStore["importedVersion"]>().mockResolvedValue(imported),
+      replaceBuild: vi.fn<GameDataStore["replaceBuild"]>().mockResolvedValue(undefined),
+      getItem: vi.fn<GameDataStore["getItem"]>(),
+      searchItems: vi.fn<GameDataStore["searchItems"]>(),
     },
     logger: { info: vi.fn<Logger["info"]>() } satisfies Pick<Logger, "info">,
   };
@@ -47,12 +47,11 @@ describe("build check", () => {
 
     await createBuildCheckJob(deps).run();
 
-    expect(deps.source.itemSparse).toHaveBeenCalledExactlyOnceWith("1.60.1.70009");
-    expect(deps.items.replaceAll).toHaveBeenCalledExactlyOnceWith(
-      "1.60.1.70009",
-      expect.anything(),
-    );
-    const records = deps.items.replaceAll.mock.calls[0]?.[1];
+    expect(deps.source.table).toHaveBeenCalledExactlyOnceWith("ItemSparse", "1.60.1.70009");
+    expect(deps.store.replaceBuild).toHaveBeenCalledOnce();
+    const build = deps.store.replaceBuild.mock.calls[0]?.[0];
+    expect(build?.version).toBe("1.60.1.70009");
+    const records = build?.items;
     expect(records).toHaveLength(1000);
     expect(records?.[0]).toEqual(firstSword);
     expect(records?.[999]?.name).toBe("Made-up Sword 1000");
@@ -63,7 +62,7 @@ describe("build check", () => {
 
     await createBuildCheckJob(deps).run();
 
-    expect(deps.items.replaceAll).not.toHaveBeenCalled();
+    expect(deps.store.replaceBuild).not.toHaveBeenCalled();
   });
 
   it("ignores a build that isn't Forever's", async () => {
@@ -71,16 +70,16 @@ describe("build check", () => {
 
     await createBuildCheckJob(deps).run();
 
-    expect(deps.items.replaceAll).not.toHaveBeenCalled();
+    expect(deps.store.replaceBuild).not.toHaveBeenCalled();
   });
 
   it("fails without touching the stored items when the download fails", async () => {
     const deps = createDeps("1.60.1.70009", "1.60.1.69893");
-    deps.source.itemSparse.mockRejectedValue(new Error("wago.tools answered HTTP 503."));
+    deps.source.table.mockRejectedValue(new Error("wago.tools answered HTTP 503."));
 
     await expect(createBuildCheckJob(deps).run()).rejects.toThrow("wago.tools answered HTTP 503.");
 
-    expect(deps.items.replaceAll).not.toHaveBeenCalled();
+    expect(deps.store.replaceBuild).not.toHaveBeenCalled();
   });
 
   it("logs each import with its build and item count", async () => {
@@ -96,13 +95,13 @@ describe("build check", () => {
 
   it("refuses a build with fewer than 1,000 items, keeping the stored ones", async () => {
     const deps = createDeps("1.60.1.70009", "1.60.1.69893");
-    deps.source.itemSparse.mockResolvedValue(itemSparseCsv(999));
+    deps.source.table.mockResolvedValue(itemSparseCsv(999));
 
     await expect(createBuildCheckJob(deps).run()).rejects.toThrow(
       "wago.tools gave only 999 items for build 1.60.1.70009, so the stored items were kept.",
     );
 
-    expect(deps.items.replaceAll).not.toHaveBeenCalled();
+    expect(deps.store.replaceBuild).not.toHaveBeenCalled();
   });
 
   it("logs a build it skips because it isn't Forever's", async () => {
@@ -121,9 +120,6 @@ describe("build check", () => {
 
     await createBuildCheckJob(deps).run();
 
-    expect(deps.items.replaceAll).toHaveBeenCalledExactlyOnceWith(
-      "1.70.0.80000",
-      expect.anything(),
-    );
+    expect(deps.store.replaceBuild.mock.calls[0]?.[0].version).toBe("1.70.0.80000");
   });
 });

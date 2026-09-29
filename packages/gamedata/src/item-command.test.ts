@@ -2,7 +2,7 @@ import { MessageFlags } from "discord-api-types/v10";
 import { describe, expect, it, vi } from "vitest";
 import { createItemCommand } from "./item-command.ts";
 import type { ItemRecord } from "./item-sparse.ts";
-import type { ItemStore } from "./item-store.ts";
+import type { GameDataStore } from "./game-data-store.ts";
 
 const madeUpSword: ItemRecord = {
   id: 270001,
@@ -15,17 +15,18 @@ const madeUpSword: ItemRecord = {
 
 function createFakeItems(stored: readonly ItemRecord[]) {
   return {
-    importedVersion: vi.fn<ItemStore["importedVersion"]>().mockResolvedValue("1.60.1.70009"),
-    replaceAll: vi.fn<ItemStore["replaceAll"]>(),
-    get: vi.fn<ItemStore["get"]>((id) => Promise.resolve(stored.find((item) => item.id === id))),
-    search: vi.fn<ItemStore["search"]>((text, limit) =>
+    importedVersion: vi.fn<GameDataStore["importedVersion"]>().mockResolvedValue("1.60.1.70009"),
+    getItem: vi.fn<GameDataStore["getItem"]>((id) =>
+      Promise.resolve(stored.find((item) => item.id === id)),
+    ),
+    searchItems: vi.fn<GameDataStore["searchItems"]>((text, limit) =>
       Promise.resolve(
         stored
           .filter((item) => item.name.toLowerCase().includes(text.toLowerCase()))
           .slice(0, limit),
       ),
     ),
-  } satisfies ItemStore;
+  } satisfies Pick<GameDataStore, "importedVersion" | "getItem" | "searchItems">;
 }
 
 function invoke(name: string) {
@@ -143,7 +144,7 @@ describe("/item", () => {
     });
 
     expect(choices).toEqual([]);
-    expect(items.search).not.toHaveBeenCalled();
+    expect(items.searchItems).not.toHaveBeenCalled();
   });
 
   it("treats a number too big to be an item ID as text to search for", async () => {

@@ -33,7 +33,7 @@ describe("wago.tools source", () => {
     const csv = await createWagoSource({
       fetch: fakeFetch,
       product: "wow_classic_beta",
-    }).itemSparse("1.60.1.70009");
+    }).table("ItemSparse", "1.60.1.70009");
 
     expect(csv).toBe("ID,Display_lang\n1,Made-up");
     expect(fakeFetch).toHaveBeenCalledExactlyOnceWith(
@@ -46,7 +46,8 @@ describe("wago.tools source", () => {
     const fakeFetch = vi.fn<typeof fetch>().mockResolvedValue(respond(503, "Busy"));
 
     await expect(
-      createWagoSource({ fetch: fakeFetch, product: "wow_classic_beta" }).itemSparse(
+      createWagoSource({ fetch: fakeFetch, product: "wow_classic_beta" }).table(
+        "ItemSparse",
         "1.60.1.70009",
       ),
     ).rejects.toThrow("wago.tools answered HTTP 503.");
@@ -55,7 +56,8 @@ describe("wago.tools source", () => {
   it("sets a time limit on each download", async () => {
     const fakeFetch = vi.fn<typeof fetch>().mockResolvedValue(respond(200, "ID,Display_lang"));
 
-    await createWagoSource({ fetch: fakeFetch, product: "wow_classic_beta" }).itemSparse(
+    await createWagoSource({ fetch: fakeFetch, product: "wow_classic_beta" }).table(
+      "ItemSparse",
       "1.60.1.70009",
     );
 

@@ -1,7 +1,7 @@
 import { type CommandReply, maxAutocompleteChoices, type SlashCommand } from "@nozdormu/core";
 import { ApplicationCommandOptionType, MessageFlags } from "discord-api-types/v10";
 import type { ItemRecord } from "./item-sparse.ts";
-import type { ItemStore } from "./item-store.ts";
+import type { GameDataStore } from "./game-data-store.ts";
 
 const qualityNames: Readonly<Record<number, string>> = {
   0: "Poor",
@@ -91,14 +91,16 @@ function choiceName(item: ItemRecord): string {
 
 // /item: suggests items as you type their name, then shows the one you pick with its Wowhead link.
 // Discord's preview of the link shows the tooltip and where the item comes from.
-export function createItemCommand(items: ItemStore): SlashCommand {
+export function createItemCommand(
+  store: Pick<GameDataStore, "importedVersion" | "getItem" | "searchItems">,
+): SlashCommand {
   const find = async (value: string): Promise<ItemRecord | undefined> => {
     // A picked suggestion sends the item's ID; text typed without picking one is searched for.
     const id = Number.parseInt(value, 10);
     if (/^\d+$/.test(value) && id <= maxItemId) {
-      return items.get(id);
+      return store.getItem(id);
     }
-    const [best] = await items.search(value, 1);
+    const [best] = await store.searchItems(value, 1);
     return best;
   };
 
@@ -121,7 +123,7 @@ export function createItemCommand(items: ItemStore): SlashCommand {
       const text = typeof value === "string" ? value.trim() : "";
       const item = text === "" ? undefined : await find(text);
       if (item === undefined) {
-        return (await items.importedVersion()) === undefined ? notLoaded : notFound;
+        return (await store.importedVersion()) === undefined ? notLoaded : notFound;
       }
       return {
         content: [
@@ -138,7 +140,7 @@ export function createItemCommand(items: ItemStore): SlashCommand {
       if (text === "") {
         return [];
       }
-      const found = await items.search(text, maxAutocompleteChoices);
+      const found = await store.searchItems(text, maxAutocompleteChoices);
       // Some items exist in several copies (one per class, say) that would look identical.
       const seen = new Set<string>();
       return found.flatMap((item) => {

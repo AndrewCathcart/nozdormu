@@ -2,14 +2,20 @@ import { type Database, gameBuilds, items } from "@nozdormu/db";
 import { and, asc, desc, eq, ilike, sql } from "drizzle-orm";
 import type { ItemRecord } from "./item-sparse.ts";
 
-export interface ItemStore {
-  // The build the stored items come from, if any has been imported.
+// Everything imported from one client build.
+export interface GameBuild {
+  readonly version: string;
+  readonly items: readonly ItemRecord[];
+}
+
+export interface GameDataStore {
+  // The build the stored data comes from, if any has been imported.
   readonly importedVersion: () => Promise<string | undefined>;
-  // Replaces every stored item with this build's, in one transaction.
-  readonly replaceAll: (version: string, records: readonly ItemRecord[]) => Promise<void>;
-  readonly get: (id: number) => Promise<ItemRecord | undefined>;
+  // Replaces all the stored data with this build's, in one transaction.
+  readonly replaceBuild: (build: GameBuild) => Promise<void>;
+  readonly getItem: (id: number) => Promise<ItemRecord | undefined>;
   // Items whose name contains the text: names starting with it first, then shorter names.
-  readonly search: (text: string, limit: number) => Promise<ItemRecord[]>;
+  readonly searchItems: (text: string, limit: number) => Promise<ItemRecord[]>;
 }
 
 // Postgres allows 65,535 parameters per statement; six per item keeps this well under.
@@ -25,7 +31,7 @@ function escapeLike(text: string): string {
   return text.replaceAll(/[\\%_]/g, (character) => `\\${character}`);
 }
 
-export function createItemStore(db: Database): ItemStore {
+export function createGameDataStore(db: Database): GameDataStore {
   return {
     importedVersion: async () => {
       const [build] = await db
@@ -35,26 +41,26 @@ export function createItemStore(db: Database): ItemStore {
         .limit(1);
       return build?.version;
     },
-    replaceAll: async (version, records) => {
+    replaceBuild: async (build) => {
       await db.transaction(async (tx) => {
         await tx.delete(items);
-        for (let start = 0; start < records.length; start += insertBatchSize) {
-          await tx.insert(items).values(records.slice(start, start + insertBatchSize));
+        for (let start = 0; start < build.items.length; start += insertBatchSize) {
+          await tx.insert(items).values(build.items.slice(start, start + insertBatchSize));
         }
         await tx
           .insert(gameBuilds)
-          .values({ version, itemCount: records.length })
+          .values({ version: build.version, itemCount: build.items.length })
           .onConflictDoUpdate({
             target: gameBuilds.version,
-            set: { itemCount: records.length, importedAt: sql`now()` },
+            set: { itemCount: build.items.length, importedAt: sql`now()` },
           });
       });
     },
-    get: async (id) => {
+    getItem: async (id) => {
       const [found] = await db.select().from(items).where(eq(items.id, id));
       return found;
     },
-    search: async (text, limit) => {
+    searchItems: async (text, limit) => {
       const escaped = escapeLike(text);
       return db
         .select()

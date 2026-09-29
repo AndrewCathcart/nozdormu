@@ -30,7 +30,7 @@ export function createWagoSource(options: WagoOptions): GameDataSource {
       );
       return latestBuild.parse(body).version;
     },
-    itemSparse: (version) =>
-      get(`https://wago.tools/db2/ItemSparse/csv?build=${encodeURIComponent(version)}`),
+    table: (name, version) =>
+      get(`https://wago.tools/db2/${name}/csv?build=${encodeURIComponent(version)}`),
   };
 }

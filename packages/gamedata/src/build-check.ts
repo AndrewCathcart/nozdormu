@@ -1,18 +1,21 @@
 import type { Logger, ScheduledJob } from "@nozdormu/core";
 import { parseItemSparse } from "./item-sparse.ts";
-import type { ItemStore } from "./item-store.ts";
+import type { GameDataStore } from "./game-data-store.ts";
+
+// The client tables we import.
+export type GameTable = "ItemSparse";
 
 // Where the game data comes from: wago.tools in production.
 export interface GameDataSource {
   // The newest build of the product we follow.
   readonly latestBuild: () => Promise<string>;
-  // The ItemSparse table of a build, as CSV.
-  readonly itemSparse: (version: string) => Promise<string>;
+  // A table of a build, as CSV.
+  readonly table: (name: GameTable, version: string) => Promise<string>;
 }
 
 export interface BuildCheckDeps {
   readonly source: GameDataSource;
-  readonly items: ItemStore;
+  readonly store: GameDataStore;
   readonly logger: Pick<Logger, "info">;
 }
 
@@ -39,17 +42,17 @@ export function createBuildCheckJob(deps: BuildCheckDeps): ScheduledJob {
       );
       return;
     }
-    if (latest === (await deps.items.importedVersion())) {
+    if (latest === (await deps.store.importedVersion())) {
       return;
     }
     const startedAt = performance.now();
-    const records = parseItemSparse(await deps.source.itemSparse(latest));
+    const records = parseItemSparse(await deps.source.table("ItemSparse", latest));
     if (records.length < minimumItems) {
       throw new Error(
         `wago.tools gave only ${String(records.length)} items for build ${latest}, so the stored items were kept.`,
       );
     }
-    await deps.items.replaceAll(latest, records);
+    await deps.store.replaceBuild({ version: latest, items: records });
     deps.logger.info(
       {
         event: "gamedata.imported",
