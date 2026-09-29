@@ -111,7 +111,7 @@ export function createDiscordChatReader({
       );
     }
 
-    // Each person's server nickname is looked up once per issue. Without one, or if the lookup
+    // Each person's server nickname is looked up once per digest. Without one, or if the lookup
     // fails, they go by their display name.
     const names = new Map<string, Promise<string>>();
     const failedLookups: unknown[] = [];
@@ -201,7 +201,7 @@ export function createDiscordChatReader({
       const { name, type } = channel.parse(await rest.get(Routes.channel(channelId)));
       if (!textChannelTypes.has(type)) {
         throw new Error(
-          `The channel ${channelId} in NEWSPAPER_CHANNEL_IDS isn't a text channel, so the newspaper can't read it.`,
+          `The channel ${channelId} in DIGEST_CHANNEL_IDS isn't a text channel, so the digest can't read it.`,
         );
       }
       const sentInWeek = await readWeek(channelId);
@@ -216,7 +216,7 @@ export function createDiscordChatReader({
     if (failedLookups.length > 0) {
       logger.error(
         {
-          event: "newspaper.nicknames_failed",
+          event: "digest.nicknames_failed",
           failures: failedLookups.length,
           err: failedLookups[0],
         },

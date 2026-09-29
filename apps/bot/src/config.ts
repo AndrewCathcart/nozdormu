@@ -16,10 +16,10 @@ export interface Config {
   readonly anthropic: {
     readonly apiKey: string;
   };
-  readonly newspaper: {
-    // The channels whose chat the weekly newspaper covers.
+  readonly digest: {
+    // The channels whose chat the weekly digest covers.
     readonly channelIds: readonly string[];
-    // The channel each issue is posted in.
+    // The channel each digest is posted in.
     readonly postChannelId: string;
   };
 }
@@ -66,8 +66,8 @@ const envSchema = z.object({
   DATABASE_URL: postgresUrl("DATABASE_URL"),
   YOUTUBE_ALERT_CHANNEL_ID: discordId("YOUTUBE_ALERT_CHANNEL_ID"),
   ANTHROPIC_API_KEY: required("ANTHROPIC_API_KEY"),
-  NEWSPAPER_CHANNEL_IDS: discordIdList("NEWSPAPER_CHANNEL_IDS"),
-  NEWSPAPER_POST_CHANNEL_ID: discordId("NEWSPAPER_POST_CHANNEL_ID"),
+  DIGEST_CHANNEL_IDS: discordIdList("DIGEST_CHANNEL_IDS"),
+  DIGEST_POST_CHANNEL_ID: discordId("DIGEST_POST_CHANNEL_ID"),
 });
 
 export function loadConfig(env: Readonly<Record<string, string | undefined>>): ConfigResult {
@@ -86,9 +86,9 @@ export function loadConfig(env: Readonly<Record<string, string | undefined>>): C
       database: { url: parsed.data.DATABASE_URL },
       youtube: { alertChannelId: parsed.data.YOUTUBE_ALERT_CHANNEL_ID },
       anthropic: { apiKey: parsed.data.ANTHROPIC_API_KEY },
-      newspaper: {
-        channelIds: parsed.data.NEWSPAPER_CHANNEL_IDS,
-        postChannelId: parsed.data.NEWSPAPER_POST_CHANNEL_ID,
+      digest: {
+        channelIds: parsed.data.DIGEST_CHANNEL_IDS,
+        postChannelId: parsed.data.DIGEST_POST_CHANNEL_ID,
       },
     },
   };

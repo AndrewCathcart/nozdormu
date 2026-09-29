@@ -1,5 +1,6 @@
-import { longDate } from "./uk-time.ts";
-import type { Issue, Story } from "./issue.ts";
+import type { Week } from "./chat.ts";
+import type { Digest, Section } from "./digest.ts";
+import { weekDates } from "./uk-time.ts";
 
 // Discord's limit on a message's length.
 const maxMessageLength = 2000;
@@ -49,9 +50,9 @@ function addParagraph(packer: MessagePacker, paragraph: string): void {
   });
 }
 
-// A story stays in one message if it can, and is otherwise split between paragraphs.
-function addStory(packer: MessagePacker, story: Story): void {
-  const text = `## ${story.headline}\n${story.body}`;
+// A section stays in one message if it can, and is otherwise split between paragraphs.
+function addSection(packer: MessagePacker, section: Section): void {
+  const text = `## ${section.heading}\n${section.body}`;
   if (packer.add(text, "\n\n")) {
     return;
   }
@@ -60,12 +61,12 @@ function addStory(packer: MessagePacker, story: Story): void {
   }
 }
 
-// The issue as Discord messages, in posting order.
-export function renderIssue(paperName: string, issueDate: Date, issue: Issue): string[] {
+// The digest as Discord messages, in posting order, under a masthead giving the week.
+export function renderDigest(week: Week, digest: Digest): string[] {
   const packer = new MessagePacker();
-  packer.add(`# 📰 ${paperName}\n-# ${longDate(issueDate)}`, "");
-  for (const story of issue.stories) {
-    addStory(packer, story);
+  packer.add(`# 📰 This week in the guild\n-# ${weekDates(week)}`, "");
+  for (const section of digest.sections) {
+    addSection(packer, section);
   }
   packer.finishMessage();
   return packer.messages;

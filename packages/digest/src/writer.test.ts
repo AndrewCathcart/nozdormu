@@ -3,14 +3,9 @@ import type { Logger } from "@nozdormu/core";
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import type { ChatChannel } from "./chat.ts";
-import type { Paper } from "./issue.ts";
+import { systemPrompt } from "./prompt.ts";
 import { chatMessage, lastWeek } from "./test-chat.ts";
 import { createClaudeWriter } from "./writer.ts";
-
-const paper = {
-  name: "The Test Gazette",
-  voice: "You are a made-up test voice.",
-} satisfies Paper;
 
 const week = lastWeek;
 
@@ -53,14 +48,14 @@ function streamed(reply: Reply): Response {
   return new Response(body, { status: 200, headers: { "content-type": "text/event-stream" } });
 }
 
-const twoStories = JSON.stringify({
-  stories: [
-    { headline: "SPREADSHEET SHOCK", body: "Brannoc has made a spreadsheet." },
-    { headline: "Weather", body: "Cloudy over Elwynn." },
+const twoSections = JSON.stringify({
+  sections: [
+    { heading: "Decided", body: "- Brannoc has made a spreadsheet." },
+    { heading: "Highlights", body: "- Nothing yet." },
   ],
 });
 
-function createFakeClaude(reply: Reply = { text: twoStories, stopReason: "end_turn" }) {
+function createFakeClaude(reply: Reply = { text: twoSections, stopReason: "end_turn" }) {
   const fetch = vi.fn<typeof globalThis.fetch>(() => Promise.resolve(streamed(reply)));
   const client = new Anthropic({ apiKey: "test-key", fetch, maxRetries: 0 });
   return { fetch, client };
@@ -77,9 +72,9 @@ function sentBody(fetch: ReturnType<typeof createFakeClaude>["fetch"]): unknown 
 }
 
 describe("createClaudeWriter", () => {
-  it("sends Claude the paper's voice and the week's chat", async () => {
+  it("sends Claude the instructions for a catch-up digest and the week's chat", async () => {
     const { fetch, client } = createFakeClaude();
-    const write = createClaudeWriter({ client, paper, logger: createFakeLogger() });
+    const write = createClaudeWriter({ client, logger: createFakeLogger() });
 
     await write(chat, week);
 
@@ -89,7 +84,7 @@ describe("createClaudeWriter", () => {
         messages: z.array(z.object({ role: z.string(), content: z.string() })),
       })
       .parse(sentBody(fetch));
-    expect(body.system).toContain("You are a made-up test voice.");
+    expect(body.system).toBe(systemPrompt);
     expect(body.messages).toHaveLength(1);
     expect(body.messages[0]?.role).toBe("user");
     expect(body.messages[0]?.content).toContain(
@@ -97,23 +92,23 @@ describe("createClaudeWriter", () => {
     );
   });
 
-  it("returns the stories Claude wrote", async () => {
+  it("returns the sections Claude wrote", async () => {
     const { client } = createFakeClaude();
-    const write = createClaudeWriter({ client, paper, logger: createFakeLogger() });
+    const write = createClaudeWriter({ client, logger: createFakeLogger() });
 
-    const issue = await write(chat, week);
+    const digest = await write(chat, week);
 
-    expect(issue).toEqual({
-      stories: [
-        { headline: "SPREADSHEET SHOCK", body: "Brannoc has made a spreadsheet." },
-        { headline: "Weather", body: "Cloudy over Elwynn." },
+    expect(digest).toEqual({
+      sections: [
+        { heading: "Decided", body: "- Brannoc has made a spreadsheet." },
+        { heading: "Highlights", body: "- Nothing yet." },
       ],
     });
   });
 
   it("asks Claude Opus 5.5, falling back to another model if it declines", async () => {
     const { fetch, client } = createFakeClaude();
-    const write = createClaudeWriter({ client, paper, logger: createFakeLogger() });
+    const write = createClaudeWriter({ client, logger: createFakeLogger() });
 
     await write(chat, week);
 
@@ -128,24 +123,24 @@ describe("createClaudeWriter", () => {
     );
   });
 
-  it("fails when Claude declines to write the issue", async () => {
+  it("fails when Claude declines to write the digest", async () => {
     const { client } = createFakeClaude({ text: "", stopReason: "refusal" });
-    const write = createClaudeWriter({ client, paper, logger: createFakeLogger() });
+    const write = createClaudeWriter({ client, logger: createFakeLogger() });
 
     await expect(write(chat, week)).rejects.toThrow(
-      new Error("Claude declined to write the issue."),
+      new Error("Claude declined to write the digest."),
     );
   });
 
-  it("fails without repeating the text when the issue is cut off", async () => {
+  it("fails without repeating the text when the digest is cut off", async () => {
     const { client } = createFakeClaude({
-      text: '{"stories":[{"headline":"SPREADSHEET SHOCK","body":"Brannoc has',
+      text: '{"sections":[{"heading":"Decided","body":"- Brannoc has',
       stopReason: "max_tokens",
     });
-    const write = createClaudeWriter({ client, paper, logger: createFakeLogger() });
+    const write = createClaudeWriter({ client, logger: createFakeLogger() });
 
     await expect(write(chat, week)).rejects.toThrow(
-      new Error("Claude's issue was cut off at the token limit."),
+      new Error("Claude's digest was cut off at the token limit."),
     );
   });
 
@@ -154,21 +149,23 @@ describe("createClaudeWriter", () => {
       text: "Brannoc has made a spreadsheet",
       stopReason: "end_turn",
     });
-    const write = createClaudeWriter({ client, paper, logger: createFakeLogger() });
+    const write = createClaudeWriter({ client, logger: createFakeLogger() });
 
-    await expect(write(chat, week)).rejects.toThrow(new Error("Claude's issue wasn't valid JSON."));
+    await expect(write(chat, week)).rejects.toThrow(
+      new Error("Claude's digest wasn't valid JSON."),
+    );
   });
 
   it("logs which model replied and how many tokens it took", async () => {
     const { client } = createFakeClaude();
     const logger = createFakeLogger();
-    const write = createClaudeWriter({ client, paper, logger });
+    const write = createClaudeWriter({ client, logger });
 
     await write(chat, week);
 
     expect(logger.info).toHaveBeenCalledExactlyOnceWith(
       {
-        event: "newspaper.claude_replied",
+        event: "digest.claude_replied",
         model: "claude-opus-5-5",
         stopReason: "end_turn",
         inputTokens: 1200,

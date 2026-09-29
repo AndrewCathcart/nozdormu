@@ -334,7 +334,7 @@ describe("createDiscordChatReader", () => {
 
     expect(messages[0]?.authorName).toBe("Brannoc");
     expect(logger.error).toHaveBeenCalledExactlyOnceWith(
-      { event: "newspaper.nicknames_failed", failures: 1, err: outage },
+      { event: "digest.nicknames_failed", failures: 1, err: outage },
       "Couldn't look up some nicknames, so those members go by their display names",
     );
   });
@@ -366,7 +366,7 @@ describe("createDiscordChatReader", () => {
       ),
     ).rejects.toThrow(
       new Error(
-        `The channel ${forumId} in NEWSPAPER_CHANNEL_IDS isn't a text channel, so the newspaper can't read it.`,
+        `The channel ${forumId} in DIGEST_CHANNEL_IDS isn't a text channel, so the digest can't read it.`,
       ),
     );
   });

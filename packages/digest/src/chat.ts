@@ -1,6 +1,6 @@
 import { shortDateTime } from "./uk-time.ts";
 
-// One message someone wrote in a channel the newspaper reads.
+// One message someone wrote in a channel the digest reads.
 export interface ChatMessage {
   // The author's server nickname, or their Discord display name if they have none.
   readonly authorName: string;
@@ -17,7 +17,7 @@ export interface ChatChannel {
   readonly messages: readonly ChatMessage[];
 }
 
-// The week an issue covers: Monday 09:00 to Monday 09:00, UK time.
+// The week a digest covers: Monday 09:00 to Monday 09:00, UK time.
 export interface Week {
   readonly from: Date;
   readonly to: Date;

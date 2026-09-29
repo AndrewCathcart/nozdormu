@@ -20,11 +20,10 @@ import {
 import {
   type ChatReader,
   createClaudeWriter,
+  createDigestFeature,
   createDiscordChatReader,
-  createNewspaperFeature,
-  type IssueWriter,
-  paper,
-} from "@nozdormu/newspaper";
+  type DigestWriter,
+} from "@nozdormu/digest";
 import { createPingFeature } from "@nozdormu/ping";
 import {
   createSeenVideoStore,
@@ -47,7 +46,7 @@ export interface FeatureDeps {
   readonly gameDataStore: GameDataStore;
   readonly gameDataSource: GameDataSource;
   readonly readChat: ChatReader;
-  readonly writeIssue: IssueWriter;
+  readonly writeDigest: DigestWriter;
   readonly now: () => Date;
   readonly logger: Pick<Logger, "info" | "error">;
 }
@@ -68,9 +67,8 @@ export function createFeatureDeps(
     gameDataStore: createGameDataStore(db),
     gameDataSource: createWagoSource({ fetch, product: foreverProduct }),
     readChat: createDiscordChatReader({ rest, guildId: config.discord.guildId, logger }),
-    writeIssue: createClaudeWriter({
+    writeDigest: createClaudeWriter({
       client: new Anthropic({ apiKey: config.anthropic.apiKey, maxRetries: 4 }),
-      paper,
       logger,
     }),
     now: () => new Date(),
@@ -94,12 +92,11 @@ export function createFeatures(deps: FeatureDeps): Feature[] {
       source: deps.gameDataSource,
       logger: deps.logger,
     }),
-    createNewspaperFeature({
-      channelIds: deps.config.newspaper.channelIds,
-      postChannelId: deps.config.newspaper.postChannelId,
-      paper,
+    createDigestFeature({
+      channelIds: deps.config.digest.channelIds,
+      postChannelId: deps.config.digest.postChannelId,
       readChat: deps.readChat,
-      write: deps.writeIssue,
+      write: deps.writeDigest,
       publish: deps.publish,
       now: deps.now,
       logger: deps.logger,

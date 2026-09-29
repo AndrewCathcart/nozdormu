@@ -7,18 +7,17 @@ import {
 } from "@nozdormu/core";
 import { MessageFlags } from "discord-api-types/v10";
 import { type ChatReader, latestChat, type Week } from "./chat.ts";
-import type { IssueWriter, Paper } from "./issue.ts";
-import { renderIssue } from "./render.ts";
-import { newspaperTimeZone } from "./uk-time.ts";
+import type { DigestWriter } from "./digest.ts";
+import { renderDigest } from "./render.ts";
+import { ukTimeZone } from "./uk-time.ts";
 
-export interface NewspaperFeatureDeps {
-  // The channels whose chat the newspaper covers.
+export interface DigestFeatureDeps {
+  // The channels whose chat the digest covers.
   readonly channelIds: readonly string[];
-  // The channel each issue is posted in.
+  // The channel each digest is posted in.
   readonly postChannelId: string;
-  readonly paper: Paper;
   readonly readChat: ChatReader;
-  readonly write: IssueWriter;
+  readonly write: DigestWriter;
   readonly publish: ChannelPublisher;
   readonly now: () => Date;
   readonly logger: Pick<Logger, "info">;
@@ -27,12 +26,12 @@ export interface NewspaperFeatureDeps {
 // Of transcript: about 100,000 tokens, roughly $0.40 of input to Claude Opus 5.5.
 const maxChatCharacters = 400_000;
 
-// Each issue comes out on Monday morning, UK time.
+// Each digest comes out on Monday morning, UK time.
 const publishedAt = {
   day: "monday",
   hour: 9,
   minute: 0,
-  timeZone: newspaperTimeZone,
+  timeZone: ukTimeZone,
 } satisfies WeeklyTime;
 
 // The week up to the latest publishing time: Monday 09:00 to Monday 09:00. A late run, or one run
@@ -42,49 +41,51 @@ function latestWeek(now: Date): Week {
   return { from: latestWeeklyTime(publishedAt, new Date(to.getTime() - 1)), to };
 }
 
-export function createNewspaperFeature(deps: NewspaperFeatureDeps): Feature {
-  const publishIssue = async (): Promise<void> => {
+// Every Monday morning, posts a catch-up on the week's chat, so members don't have to scroll back
+// through all of it.
+export function createDigestFeature(deps: DigestFeatureDeps): Feature {
+  const publishDigest = async (): Promise<void> => {
     const week = latestWeek(deps.now());
     const weekOfChat = await deps.readChat(deps.channelIds, week);
     const { chat, kept, dropped } = latestChat(weekOfChat, maxChatCharacters);
     if (dropped > 0) {
       deps.logger.info(
-        { event: "newspaper.chat_trimmed", keptMessages: kept, droppedMessages: dropped },
+        { event: "digest.chat_trimmed", keptMessages: kept, droppedMessages: dropped },
         "Left the week's oldest chat out to stay within the limit",
       );
     }
     if (kept === 0) {
       deps.logger.info(
-        { event: "newspaper.quiet_week", from: week.from, to: week.to },
-        "Nobody wrote anything this week, so there's no issue",
+        { event: "digest.quiet_week", from: week.from, to: week.to },
+        "Nobody wrote anything this week, so there's no digest",
       );
       return;
     }
-    const issue = await deps.write(chat, week);
-    if (issue.stories.length === 0) {
-      throw new Error("Claude wrote an issue with no stories.");
+    const digest = await deps.write(chat, week);
+    if (digest.sections.length === 0) {
+      throw new Error("Claude wrote a digest with no sections.");
     }
-    const messages = renderIssue(deps.paper.name, week.to, issue);
-    const issueDate = week.to.toISOString().slice(0, 10);
+    const messages = renderDigest(week, digest);
+    const postedOn = week.to.toISOString().slice(0, 10);
     for (const [index, content] of messages.entries()) {
       await deps.publish(deps.postChannelId, {
         content,
         allowed_mentions: { parse: [] },
         flags: MessageFlags.SuppressEmbeds,
-        nonce: `news-${issueDate}-${String(index)}`,
+        nonce: `digest-${postedOn}-${String(index)}`,
         enforce_nonce: true,
       });
     }
     deps.logger.info(
       {
-        event: "newspaper.published",
+        event: "digest.published",
         chatMessages: kept,
-        stories: issue.stories.length,
+        sections: digest.sections.length,
         discordMessages: messages.length,
       },
-      "Published this week's newspaper",
+      "Published this week's digest",
     );
   };
 
-  return { jobs: [{ name: "newspaper.publish", weekly: publishedAt, run: publishIssue }] };
+  return { jobs: [{ name: "digest.publish", weekly: publishedAt, run: publishDigest }] };
 }
