@@ -1,4 +1,4 @@
-import type { ItemStat, ScannedItem } from "./spyglass.ts";
+import type { ItemStat, ScannedItem } from "./scanned-item.ts";
 
 // Where an item is worn, by the game's name for it. Items that aren't worn have none.
 const slots: ReadonlyMap<string, string> = new Map([

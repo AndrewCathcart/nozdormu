@@ -8,15 +8,9 @@ import {
   scannedItems,
   scannedItemStats,
 } from "@nozdormu/db";
+import type { ScannedItem } from "@nozdormu/gamedata";
 import { asc, eq, inArray } from "drizzle-orm";
-import {
-  type Dungeon,
-  faction,
-  type LootItem,
-  type Quest,
-  type ScannedItem,
-  type SpyglassData,
-} from "./spyglass.ts";
+import { type Dungeon, faction, type LootItem, type Quest, type SpyglassData } from "./spyglass.ts";
 
 // A loot item, with its scanned details where Spyglass has scanned it.
 export interface StoredLootItem extends LootItem {

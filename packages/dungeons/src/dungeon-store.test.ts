@@ -1,7 +1,8 @@
 import { useTestDatabase } from "@nozdormu/db/testing";
 import { describe, expect, it } from "vitest";
 import { createDungeonStore } from "./dungeon-store.ts";
-import type { Dungeon, ScannedItem, SpyglassData } from "./spyglass.ts";
+import type { ScannedItem } from "@nozdormu/gamedata";
+import type { Dungeon, SpyglassData } from "./spyglass.ts";
 
 const database = useTestDatabase();
 
