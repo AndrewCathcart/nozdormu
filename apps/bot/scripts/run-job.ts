@@ -41,7 +41,12 @@ function readOnlyGameData(store: GameDataStore): GameDataStore {
     ...store,
     replaceBuild: (build) => {
       logger.info(
-        { event: "dry_run.import", version: build.version, items: build.items.length },
+        {
+          event: "dry_run.import",
+          version: build.version,
+          items: build.items.length,
+          recipes: build.recipes.length,
+        },
         "Would replace the stored game data",
       );
       return Promise.resolve();

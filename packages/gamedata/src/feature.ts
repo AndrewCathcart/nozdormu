@@ -1,6 +1,7 @@
 import type { Feature, Logger } from "@nozdormu/core";
 import { createBuildCheckJob, type GameDataSource } from "./build-check.ts";
 import { createItemCommand } from "./item-command.ts";
+import { createRecipeCommand } from "./recipe-command.ts";
 import type { GameDataStore } from "./game-data-store.ts";
 
 export interface GameDataFeatureDeps {
@@ -9,10 +10,11 @@ export interface GameDataFeatureDeps {
   readonly logger: Pick<Logger, "info">;
 }
 
-// The game database: /item, and the hourly import of each new Forever build's items.
+// The game database: /item, /recipe, and the hourly import of each new Forever build's items and
+// recipes.
 export function createGameDataFeature(deps: GameDataFeatureDeps): Feature {
   return {
-    commands: [createItemCommand(deps.store)],
+    commands: [createItemCommand(deps.store), createRecipeCommand(deps.store)],
     jobs: [createBuildCheckJob(deps)],
   };
 }

@@ -36,7 +36,8 @@ function isForeverBuild(version: string): boolean {
 async function download(source: GameDataSource, version: string): Promise<GameBuild> {
   const table = (name: GameTable): Promise<string> => source.table(name, version);
   const items = parseItemSparse(await table("ItemSparse"));
-  const recipes = parseRecipes({
+  const itemIds = new Set(items.map((item) => item.id));
+  const allRecipes = parseRecipes({
     SkillLine: await table("SkillLine"),
     SkillLineAbility: await table("SkillLineAbility"),
     SpellName: await table("SpellName"),
@@ -45,6 +46,11 @@ async function download(source: GameDataSource, version: string): Promise<GameBu
     ItemEffect: await table("ItemEffect"),
     ItemXItemEffect: await table("ItemXItemEffect"),
   });
+  // The client still lists recipes, mostly Season of Discovery's, whose items Forever's item table
+  // doesn't have. They can't be made, so they're left out, as are recipe items Forever doesn't have.
+  const recipes = allRecipes
+    .filter((recipe) => itemIds.has(recipe.itemId))
+    .map((recipe) => ({ ...recipe, taughtBy: recipe.taughtBy.filter((id) => itemIds.has(id)) }));
   return { version, items, recipes };
 }
 

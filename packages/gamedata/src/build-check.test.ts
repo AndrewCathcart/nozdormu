@@ -3,8 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 import { createBuildCheckJob, type GameDataSource, type GameTable } from "./build-check.ts";
 import type { GameDataStore } from "./game-data-store.ts";
 import type { ItemRecord } from "./item-sparse.ts";
-import type { RecipeRecord } from "./recipes.ts";
-import { itemSparseCsv, recipeTablesCsv } from "./test-tables.ts";
+import type { RecipeRecord, RecipeTable } from "./recipes.ts";
+import { csv, itemSparseCsv, recipeTablesCsv } from "./test-tables.ts";
 
 const firstSword: ItemRecord = {
   id: 270_001,
@@ -28,8 +28,12 @@ const firstSwordRecipe: RecipeRecord = {
 };
 
 // A source whose builds have this many items and recipes.
-function fakeTables(itemCount: number, recipeCount: number) {
-  const recipeTables = recipeTablesCsv(recipeCount);
+function fakeTables(
+  itemCount: number,
+  recipeCount: number,
+  overrides: Partial<Record<RecipeTable, string>> = {},
+) {
+  const recipeTables = { ...recipeTablesCsv(recipeCount), ...overrides };
   return (name: GameTable): Promise<string> =>
     Promise.resolve(name === "ItemSparse" ? itemSparseCsv(itemCount) : recipeTables[name]);
 }
@@ -90,6 +94,41 @@ describe("build check", () => {
     expect(recipes).toHaveLength(1000);
     expect(recipes?.[0]).toEqual(firstSwordRecipe);
     expect(recipes?.[999]?.name).toBe("Made-up Sword 1000");
+  });
+
+  // The client still lists recipes, mostly Season of Discovery's, whose items Forever doesn't have.
+  it("leaves out recipes that make an item the build doesn't have", async () => {
+    const deps = createDeps("1.60.1.70009", "1.60.1.69893");
+    // Recipe 1001 makes item 271001, one past the last of the 1,000 items.
+    deps.source.table.mockImplementation(fakeTables(1000, 1001));
+
+    await createBuildCheckJob(deps).run();
+
+    const recipes = deps.store.replaceBuild.mock.calls[0]?.[0].recipes;
+    expect(recipes).toHaveLength(1000);
+    expect(recipes?.at(-1)?.spellId).toBe(901_000);
+  });
+
+  it("leaves out teaching items the build doesn't have", async () => {
+    const deps = createDeps("1.60.1.70009", "1.60.1.69893");
+    // Recipe 1 is taught by item 270002, one of the build's, and by item 279999, which isn't.
+    deps.source.table.mockImplementation(
+      fakeTables(1000, 1000, {
+        ItemEffect: csv([
+          ["ID", "TriggerType", "SpellID"],
+          [1, 6, 900_001],
+        ]),
+        ItemXItemEffect: csv([
+          ["ID", "ItemEffectID", "ItemID"],
+          [1, 1, 270_002],
+          [2, 1, 279_999],
+        ]),
+      }),
+    );
+
+    await createBuildCheckJob(deps).run();
+
+    expect(deps.store.replaceBuild.mock.calls[0]?.[0].recipes[0]?.taughtBy).toEqual([270_002]);
   });
 
   it("doesn't import a build it has already imported", async () => {
