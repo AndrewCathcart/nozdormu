@@ -92,4 +92,4 @@ jobs:
           persist-credentials: false
       - run: npx --yes @railway/cli@5.62.1 up --ci --service nozdormu
         env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_SECRET }}
