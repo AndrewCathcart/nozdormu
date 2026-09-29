@@ -86,6 +86,13 @@ export function startScheduler(jobs: readonly ScheduledJob[], deps: SchedulerDep
   };
 
   const runJob = async (job: ScheduledJob, startedAt: Date): Promise<void> => {
+    // Past its interval, another process could claim the next run while this one still runs.
+    const overrunning = setTimeout(() => {
+      deps.logger.error(
+        { event: "job.overrunning", job: job.name, intervalMs: job.intervalMs },
+        "A scheduled job is still running after its interval",
+      );
+    }, job.intervalMs);
     try {
       await job.run();
       deps.logger.info(
@@ -94,6 +101,8 @@ export function startScheduler(jobs: readonly ScheduledJob[], deps: SchedulerDep
       );
     } catch (error) {
       deps.logger.error({ event: "job.failed", job: job.name, err: error }, "Scheduled job failed");
+    } finally {
+      clearTimeout(overrunning);
     }
   };
 
@@ -114,6 +123,10 @@ export function startScheduler(jobs: readonly ScheduledJob[], deps: SchedulerDep
     if (!claimed) {
       const lastRunAt = await lookUpLastRun(job);
       return lastRunAt === "unknown" ? job.intervalMs : delayUntilDue(job, lastRunAt);
+    }
+    // Stopped while claiming: don't start work during shutdown. This interval's run is skipped.
+    if (stopped) {
+      return job.intervalMs;
     }
     await runJob(job, startedAt);
     return delayUntilDue(job, startedAt);

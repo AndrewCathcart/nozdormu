@@ -20,13 +20,37 @@ async function main(): Promise<void> {
 
   const features = createFeatures();
   const registry = createRegistry(features, logger);
-  // Started before anything touches Discord, so bad job definitions fail first and a shutdown
-  // signal always finds it. Jobs talk to Discord over REST, so they don't need the gateway.
+  const rest = new REST().setToken(discord.token);
+  const client = new Client({ intents: [GatewayIntentBits.Guilds] });
+  // Started before anything touches Discord, so bad job definitions fail first. Jobs talk to
+  // Discord over REST, so they don't need the gateway.
   const scheduler = startScheduler(
     features.flatMap((feature) => feature.jobs ?? []),
     { store: createJobRunStore(database.db), logger, stopTimeoutMs: 10_000 },
   );
-  const rest = new REST().setToken(discord.token);
+
+  const shutDown = async (): Promise<void> => {
+    await scheduler.stop();
+    await client.destroy();
+    await database.close();
+  };
+
+  // Installed straight after the scheduler starts, so a signal at any later point stops it.
+  for (const signal of ["SIGINT", "SIGTERM"] as const) {
+    process.once(signal, () => {
+      logger.info({ event: "bot.stopping", signal }, "Stopping");
+      shutDown()
+        .then(() => {
+          logger.info({ event: "bot.stopped" }, "Stopped");
+          process.exit(0);
+        })
+        .catch((error: unknown) => {
+          logger.error({ event: "bot.stop_failed", err: error }, "Couldn't stop cleanly");
+          process.exit(1);
+        });
+    });
+  }
+
   try {
     const outcome = await registerCommandsIfChanged(discord, registry.commandDefinitions, {
       store: createCommandRegistrationStore(database.db),
@@ -40,40 +64,19 @@ async function main(): Promise<void> {
       outcome === "registered" ? "Commands registered" : "Commands unchanged since last start",
     );
   } catch (error) {
-    await scheduler.stop();
-    await database.close();
+    await shutDown();
     exitOnDiscordRejection(error, logger);
   }
 
-  const client = new Client({ intents: [GatewayIntentBits.Guilds] });
   routeInteractions(client, rest, registry, logger);
   client.once(Events.ClientReady, (ready) => {
     logger.info({ event: "bot.ready", user: ready.user.tag }, "Bot ready");
   });
 
-  for (const signal of ["SIGINT", "SIGTERM"] as const) {
-    process.once(signal, () => {
-      logger.info({ event: "bot.stopping", signal }, "Stopping");
-      scheduler
-        .stop()
-        .then(() => client.destroy())
-        .then(() => database.close())
-        .then(() => {
-          logger.info({ event: "bot.stopped" }, "Stopped");
-          process.exit(0);
-        })
-        .catch((error: unknown) => {
-          logger.error({ event: "bot.stop_failed", err: error }, "Couldn't stop cleanly");
-          process.exit(1);
-        });
-    });
-  }
-
   try {
     await client.login(discord.token);
   } catch (error) {
-    await scheduler.stop();
-    await database.close();
+    await shutDown();
     exitOnDiscordRejection(error, logger);
   }
 }

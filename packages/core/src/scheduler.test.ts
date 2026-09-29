@@ -357,7 +357,7 @@ describe("startScheduler", () => {
       "Stopped without waiting for scheduled jobs still running",
     );
   });
-  it("waits for a startup lookup still in progress when stopping, then runs nothing", async () => {
+  it("waits for a startup lookup still in progress before stop resolves", async () => {
     const job = createJob("poll", 10 * minute);
     const lookup = Promise.withResolvers<Date | undefined>();
     const store = { ...createFakeStore(), lastRunAt: () => lookup.promise };
@@ -368,7 +368,19 @@ describe("startScheduler", () => {
       stopped = true;
     });
     await vi.advanceTimersByTimeAsync(0);
+
     expect(stopped).toBe(false);
+    lookup.resolve(undefined);
+    await stopping;
+  });
+
+  it("runs nothing when a startup lookup finishes after stopping", async () => {
+    const job = createJob("poll", 10 * minute);
+    const lookup = Promise.withResolvers<Date | undefined>();
+    const store = { ...createFakeStore(), lastRunAt: () => lookup.promise };
+    const scheduler = startWith([job], { store });
+
+    const stopping = scheduler.stop();
     lookup.resolve(undefined);
     await stopping;
     await vi.advanceTimersByTimeAsync(30 * minute);
@@ -376,8 +388,8 @@ describe("startScheduler", () => {
     expect(job.run).not.toHaveBeenCalled();
   });
 
-  it.each([0, 30 * 24 * 60 * minute])(
-    "refuses an interval of %i ms, which setTimeout can't hold",
+  it.each([0, 1.5, Number.NaN, 30 * 24 * 60 * minute])(
+    "refuses an interval of %s ms",
     (intervalMs) => {
       expect(() => startWith([createJob("poll", intervalMs)])).toThrow(
         new Error(
@@ -386,4 +398,47 @@ describe("startScheduler", () => {
       );
     },
   );
+  it("logs a run that's still going one interval after it started", async () => {
+    const job = createJob("poll", 10 * minute);
+    job.run.mockImplementation(jobTaking(25 * minute));
+    const logger = createFakeLogger();
+
+    const scheduler = startWith([job], { logger });
+    await vi.advanceTimersByTimeAsync(10 * minute);
+
+    expect(logger.error).toHaveBeenCalledExactlyOnceWith(
+      { event: "job.overrunning", job: "poll", intervalMs: 10 * minute },
+      "A scheduled job is still running after its interval",
+    );
+    await vi.advanceTimersByTimeAsync(15 * minute);
+    await scheduler.stop();
+  });
+  it("doesn't start a run whose claim comes back after stopping", async () => {
+    const job = createJob("poll", 10 * minute);
+    const store = createFakeStore();
+    const claim = Promise.withResolvers<boolean>();
+    const slowStore = { ...store, claimRun: () => claim.promise };
+    const scheduler = startWith([job], { store: slowStore });
+    await vi.advanceTimersByTimeAsync(0);
+
+    const stopping = scheduler.stop();
+    claim.resolve(true);
+    await stopping;
+
+    expect(job.run).not.toHaveBeenCalled();
+  });
+
+  it("leaves no timers behind once stopped", async () => {
+    const job = createJob("poll", 10 * minute);
+    const run = Promise.withResolvers<undefined>();
+    job.run.mockReturnValue(run.promise);
+    const scheduler = startWith([job]);
+    await vi.advanceTimersByTimeAsync(0);
+
+    const stopping = scheduler.stop();
+    run.resolve(undefined);
+    await stopping;
+
+    expect(vi.getTimerCount()).toBe(0);
+  });
 });

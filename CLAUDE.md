@@ -70,10 +70,10 @@ Planned:
 ## Scheduling and time
 
 - The scheduler runs in-process, on intervals of 1 ms to about 24.8 days (setTimeout's limit). Each job's name is unique (e.g. `youtube.poll`).
-- Before each run, the scheduler claims it in the `job_runs` table: one atomic statement records the start time, but only if the job is due (never ran, or its last run started at least one interval earlier). So a job never runs twice at once, even across two processes during a deploy, and a run that dies halfway isn't repeated until its next interval. Jobs run at most once per interval.
+- Before each run, the scheduler claims it in the `job_runs` table: one atomic statement records the start time, but only if the job is due (never ran, or its last run started at least one interval earlier). So two processes (say, old and new during a deploy) never both start the same interval's run, and a run that dies halfway isn't repeated until its next interval. Jobs run at most once per interval. The claim isn't a lock: a run that outlasts its interval could overlap the next one in another process, so keep runs well within their interval. The scheduler logs `job.overrunning` when a run is still going one interval after it started.
 - At startup, a job that never ran or fell due while the bot was down is tried straight away; otherwise it waits until one interval after its last start, and never longer than one interval. If the last run can't be looked up, it's tried straight away and the claim decides. If the claim itself fails (`job.claim_failed`), the job doesn't run and is tried again an interval later.
 - A job that throws is logged as `job.failed` and runs again at its next interval. Each finished run is logged as `job.finished` with its duration.
-- Stopping the scheduler starts no new runs, waits up to 10 seconds for runs in progress, then logs `scheduler.stop_timed_out` naming any it gave up on.
+- Stopping the scheduler starts no new runs (a claim that comes back after stopping is skipped, so that interval's run is lost), waits up to 10 seconds for runs in progress, then logs `scheduler.stop_timed_out` naming any it gave up on. The bot installs its SIGINT/SIGTERM handlers straight after starting the scheduler.
 - The guild plays on EU realms. Server time is one config setting, defaulting to `Europe/Paris`.
 - Handlers get the time from the injected clock, never from the system clock directly.
 
