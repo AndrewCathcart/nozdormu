@@ -10,5 +10,8 @@
     "discord-api-types": "catalog:",
     "discord.js": "catalog:",
     "pino": "catalog:"
+  },
+  "devDependencies": {
+    "drizzle-orm": "catalog:"
   }
 }

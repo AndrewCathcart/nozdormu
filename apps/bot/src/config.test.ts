@@ -5,6 +5,7 @@ const validEnv = {
   DISCORD_TOKEN: "made-up-token",
   DISCORD_APPLICATION_ID: "100000000000000001",
   DISCORD_GUILD_ID: "200000000000000002",
+  DATABASE_URL: "postgres://made-up-user:made-up-password@localhost:5432/nozdormu",
 };
 
 describe("loadConfig", () => {
@@ -17,6 +18,7 @@ describe("loadConfig", () => {
           applicationId: "100000000000000001",
           guildId: "200000000000000002",
         },
+        database: { url: "postgres://made-up-user:made-up-password@localhost:5432/nozdormu" },
       },
     });
   });
@@ -25,7 +27,11 @@ describe("loadConfig", () => {
     expect(loadConfig({ DISCORD_TOKEN: "", DISCORD_APPLICATION_ID: "100000000000000001" })).toEqual(
       {
         ok: false,
-        problems: ["DISCORD_TOKEN is missing.", "DISCORD_GUILD_ID is missing."],
+        problems: [
+          "DISCORD_TOKEN is missing.",
+          "DISCORD_GUILD_ID is missing.",
+          "DATABASE_URL is missing.",
+        ],
       },
     );
   });
@@ -47,5 +53,26 @@ describe("loadConfig", () => {
       ok: false,
       problems: ["DISCORD_GUILD_ID is missing."],
     });
+  });
+
+  it("names a database URL that isn't a Postgres URL, without repeating it", () => {
+    expect(
+      loadConfig({
+        ...validEnv,
+        DATABASE_URL: "mysql://made-up-user:made-up-password@localhost/db",
+      }),
+    ).toEqual({
+      ok: false,
+      problems: ["DATABASE_URL must be a postgres:// URL."],
+    });
+  });
+
+  it("names a database URL that can't be parsed, without repeating it", () => {
+    expect(
+      loadConfig({
+        ...validEnv,
+        DATABASE_URL: "postgres://made-up-user:made-up-password@bad host/nozdormu",
+      }),
+    ).toEqual({ ok: false, problems: ["DATABASE_URL must be a postgres:// URL."] });
   });
 });

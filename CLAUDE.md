@@ -33,11 +33,11 @@ Prefer the latest versions that work together, and fast tools. The choices below
 - TypeScript 7 (the native compiler), strict. No build step: the code is written so Node can run the `.ts` files directly, so only erasable syntax (no enums, namespaces or parameter properties), and relative imports end in `.ts`. One root `tsconfig.json` covers every package, so a new package can't be skipped.
 - Oxlint with type-aware rules for linting, run on TypeScript 7's compiler: the typescript-eslint strict type-checked set, plus exhaustive `switch` checks, consistent type imports and explicit return types on exported functions. oxfmt for formatting. No ESLint or Prettier.
 - discord.js 14. Use its types and `discord-api-types` rather than hand-rolled ones.
-- pino for structured logging. Code takes a `Pick<Logger, ...>` of the methods it uses, so tests can pass a typed fake.
+- pino for structured logging, created with `createLogger()` from core. Code takes a `Pick<Logger, ...>` of the methods it uses (`Logger` is re-exported from core), so tests can pass a typed fake.
 - Vitest 5, finding `*.test.ts` files anywhere. Database tests run against real Postgres, not mocks.
 - `minimumReleaseAge` in `pnpm-workspace.yaml` refuses packages published less than a day ago. Pin the previous release rather than adding an exclusion. Renovate waits 3 days before proposing an update.
-- Postgres on Supabase's free plan, reached through Supabase's connection pooler. Drizzle ORM 0.45 and drizzle-kit 0.31.
-- Locally, Postgres runs in DBngin, not Docker. Use the same major version as Supabase. The local server is shared with Andy's other projects, so only create, use and drop databases whose names start with `nozdormu_`.
+- Postgres on Supabase's free plan, reached through Supabase's session pooler, which supports the prepared statements postgres.js uses. (The transaction pooler would need `prepare: false`.) Drizzle ORM 0.45 with postgres.js, and drizzle-kit 0.31.
+- Locally, Postgres 18.4 runs in DBngin, not Docker: the server called "nozdormu" on port 5433, which accepts the `postgres` user without a password. Never touch the server on port 5432; it holds Andy's other projects. Only create, use and drop databases whose names start with `nozdormu_`. The bot's local database is `nozdormu_dev`. CI runs a `postgres:18.4` service container on port 5433. Match Supabase's major version once the project exists.
 - zod 4 for env validation. lefthook for git hooks. Renovate for dependency updates.
 - Hosted on Railway Hobby. The Claude API writes the newspaper.
 
@@ -45,22 +45,22 @@ Prefer the latest versions that work together, and fast tools. The choices below
 
 Built so far:
 
-- `apps/bot` is the process. `src/main.ts` loads config (`loadConfig` validates the environment and names bad settings without echoing values), builds the registry from `createFeatures()`, registers commands, connects to the gateway, and disconnects cleanly on SIGINT or SIGTERM. If Discord rejects a well-formed setting, `explainRejectedSetting` turns the error into a message naming it.
-- `packages/core` holds the feature registry (`createRegistry`), the Discord adapter (`registerGuildCommands`, `routeInteractions`) and `serializeError`. The registry refuses duplicate command names and dispatches each command to its handler. Every dispatch result carries the reply to send: an unknown command or a handler that throws gets a private error reply and a log entry, never a crash. The adapter sends that reply through Discord's interaction callback. Keep the core thin.
+- `apps/bot` is the process. `src/main.ts` loads config (`loadConfig` validates the environment and names bad settings without echoing values), connects to Postgres, builds the registry from `createFeatures()`, registers commands if they changed since the last start, connects to the gateway, and disconnects cleanly on SIGINT or SIGTERM. `src/migrate.ts` applies pending migrations; Railway will run it before each deploy. Both use `src/startup.ts`, which exits with a message naming the setting when config is invalid or Postgres refuses the connection. `src/startup-failures.ts` turns Discord's and Postgres's rejections into those messages.
+- `packages/core` holds the feature registry (`createRegistry`), the Discord adapter (`registerGuildCommands`, `routeInteractions`), `registerCommandsIfChanged`, `createLogger` and `serializeError`. The registry refuses duplicate command names and dispatches each command to its handler. Every dispatch result carries the reply to send: an unknown command or a handler that throws gets a private error reply and a log entry, never a crash. The adapter sends that reply through Discord's interaction callback. Keep the core thin.
+- `packages/db` holds the Drizzle schema (`src/schema.ts`), the committed migrations (`migrations/`), `connectDatabase` (which runs `select 1`, so a bad URL fails straight away), `runMigrations` (which returns how many it applied), and the Postgres stores, such as `createCommandRegistrationStore`. `@nozdormu/db/testing` gives each test file its own database.
 - `packages/ping` is the `/ping` feature.
-- Each feature package exports a factory, such as `createPingFeature()`, that takes the feature's injected dependencies (Discord client, database, Claude client, clock) and returns a `Feature`. Command handlers take a parsed `CommandInvocation` and return a `Promise<CommandReply>`. That's the main testing seam.
+- Each feature package exports a factory, such as `createPingFeature()`, that takes the feature's injected dependencies (for example the Discord REST client, the database, the Claude client, a clock) and returns a `Feature`. Command handlers take a parsed `CommandInvocation` and return a `Promise<CommandReply>`. That's the main testing seam.
 - Internal packages are source-only: `exports` points at `src/*.ts`, and dependents use `workspace:*`. Shared dependency versions live in the `catalog` in `pnpm-workspace.yaml`.
 
 Planned:
 
-- `packages/db` holds the schema and migrations.
 - The core gains the scheduler, and the bot starts it. Features also export autocomplete handlers, event handlers and scheduled jobs.
 
 ## Discord
 
 - Two Discord applications. "Nozdormu Dev" runs locally, installed in a private test server. "Nozdormu" runs on Railway, installed in the guild server.
 - Slash commands arrive over the gateway, so there's no public endpoint and no tunnel.
-- On startup, bulk-overwrite the guild's commands (`PUT /applications/{id}/guilds/{guild}/commands`). For now this happens on every startup. Once there's a database, only do it when a stored hash of the command definitions has changed. Discord allows 200 command creates per day per guild.
+- On startup, bulk-overwrite the guild's commands (`PUT /applications/{id}/guilds/{guild}/commands`). `registerCommandsIfChanged` only does this when the command definitions' hash differs from the one stored for that application in that server. Discord allows 200 command creates per day per guild.
 - The bot's settings are listed in `.env.example`. Locally they live in a gitignored `.env` at the repo root, which the bot's scripts load with Node's `--env-file-if-exists`.
 - Autocomplete returns at most 25 choices within 3 seconds.
 - Anything slower than 3 seconds defers its reply, then edits it within the 15-minute interaction window.
@@ -74,8 +74,9 @@ Planned:
 
 ## Database
 
-- Generate SQL migrations with drizzle-kit and commit them. Railway's pre-deploy command applies them after the build and before the new version starts. If a migration fails, the deploy stops.
+- Change `packages/db/src/schema.ts`, run `pnpm db:generate --name <what_changed>`, and commit the generated SQL and its `meta/` files. Never edit a migration that has been merged. Railway's pre-deploy command will apply them after the build and before the new version starts. If a migration fails, the deploy stops.
 - Migrations only go forward. Each must work with the code that's already running: add things first, and drop columns in a later PR.
+- Database tests use real Postgres, never mocks. At the top of a test file, `const database = useTestDatabase()` (from `./testing.ts` inside `packages/db`, or `@nozdormu/db/testing` elsewhere) gives that file its own database, copied from a template that Vitest's global setup migrates once per run. Use `database.db` inside tests. `useTestDatabase({ migrated: false })` gives an empty one. Global setup also drops test databases more than an hour old, left by killed runs. Tests connect to the server's `postgres` database only to create and drop their own. Unit tests of logic that uses a store may pass an in-memory fake of the store's interface.
 - The free plan has no backups. Decide on a backup job before storing anything members type in.
 - Free projects pause after a week without database activity.
 
@@ -83,9 +84,10 @@ Planned:
 
 - `pnpm check` runs everything CI runs: format check, lint, typecheck and tests.
 - `pnpm dev` runs the bot against the Dev app and restarts it on changes. `pnpm start` runs it once.
-- `pnpm smoke` starts the bot, waits for its ready log line, checks through Discord's API that its commands are registered, then stops it.
+- `pnpm smoke` starts the bot, waits for its ready log line, checks through Discord's API that exactly the bot's commands are registered, then stops it.
 - `pnpm fmt` formats every file. `pnpm lint`, `pnpm typecheck` and `pnpm test` run one step each.
-- `pnpm test <path>` runs a single test file.
+- `pnpm test <path>` runs a single test file. Tests need the DBngin "nozdormu" server running.
+- `pnpm db:migrate` applies pending migrations to `DATABASE_URL` and logs how many it applied. `pnpm db:generate` writes a migration from schema changes.
 - lefthook formats and lints staged files on each commit.
 
 ## Verifying work
@@ -93,12 +95,13 @@ Planned:
 Tests are the minimum. Before calling a change done, run `pnpm check` and `pnpm smoke`, and check the change against the real thing.
 
 - Logs are pino JSON lines with a named `event`, plus durations and counts, and never message content or secrets. After a deploy, read them with `railway logs`.
-- Log errors under the `err` key, and never log a raw error object any other way. The bot's logger passes `err` through `serializeError`, which keeps only the error's name, message, stack, HTTP status and code. Discord's request errors also carry the request URL, which can hold an interaction token, and the request body, which can hold message content.
+- Log errors under the `err` key, and never log a raw error object any other way. The logger from `createLogger()` passes `err` through `serializeError`, which keeps only the error's name, message, stack, HTTP status, code and (recursively) cause. That's because Discord's request errors carry the request URL, which can hold an interaction token, and the request body, which can hold message content. It also replaces the message of Drizzle's failed-query errors, which list the query's parameter values, and of Postgres's data errors (SQLSTATE class 22), which repeat the rejected value.
 - Only a real user can run a slash command. Never drive Andy's Discord account in the Discord app or web client; that's a self-bot, which Discord's terms forbid. At milestones, ask Andy to run the command in the test server. You can read back what the bot posted through the bot's own API access. The Developer Portal is fine to drive when Andy asks, but never reveal or copy a token or secret there; Andy handles those.
+
+- After adding a migration, run `pnpm db:migrate` twice against `nozdormu_dev`: the second run must do nothing.
 
 Planned, as the bot is built:
 
-- Run migrations against local Postgres the way Railway's pre-deploy command will.
 - Scheduled jobs have a dry-run mode that uses the real external source and prints what it would post instead of posting it.
 
 ## CI and deploy

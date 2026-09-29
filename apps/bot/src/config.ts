@@ -6,6 +6,9 @@ export interface Config {
     readonly applicationId: string;
     readonly guildId: string;
   };
+  readonly database: {
+    readonly url: string;
+  };
 }
 
 export type ConfigResult =
@@ -24,10 +27,19 @@ function discordId(name: string): z.ZodString {
   });
 }
 
+function isPostgresUrl(value: string): boolean {
+  return URL.canParse(value) && /^postgres(ql)?:$/.test(new URL(value).protocol);
+}
+
+function postgresUrl(name: string): z.ZodString {
+  return required(name).refine(isPostgresUrl, { error: `${name} must be a postgres:// URL.` });
+}
+
 const envSchema = z.object({
   DISCORD_TOKEN: required("DISCORD_TOKEN"),
   DISCORD_APPLICATION_ID: discordId("DISCORD_APPLICATION_ID"),
   DISCORD_GUILD_ID: discordId("DISCORD_GUILD_ID"),
+  DATABASE_URL: postgresUrl("DATABASE_URL"),
 });
 
 export function loadConfig(env: Readonly<Record<string, string | undefined>>): ConfigResult {
@@ -43,6 +55,7 @@ export function loadConfig(env: Readonly<Record<string, string | undefined>>): C
         applicationId: parsed.data.DISCORD_APPLICATION_ID,
         guildId: parsed.data.DISCORD_GUILD_ID,
       },
+      database: { url: parsed.data.DATABASE_URL },
     },
   };
 }

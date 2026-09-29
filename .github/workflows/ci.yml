@@ -17,6 +17,19 @@ jobs:
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # Tests use real Postgres on port 5433, like the local DBngin "nozdormu" server.
+    services:
+      postgres:
+        image: postgres:18.4
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

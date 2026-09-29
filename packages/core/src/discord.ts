@@ -5,13 +5,9 @@ import {
 } from "discord-api-types/v10";
 import { type Client, Events, type REST } from "discord.js";
 import type { Logger } from "pino";
+import type { GuildTarget } from "./command-registration.ts";
 import type { CommandDefinition } from "./feature.ts";
 import type { Registry } from "./registry.ts";
-
-interface GuildTarget {
-  readonly applicationId: string;
-  readonly guildId: string;
-}
 
 // Bulk-overwrites the guild's commands, so commands removed from the code disappear from Discord too.
 export async function registerGuildCommands(
