@@ -3,6 +3,8 @@ import type { Logger } from "pino";
 import type {
   AutocompleteChoice,
   AutocompleteQuery,
+  ButtonPress,
+  ButtonResponse,
   CommandDefinition,
   CommandInvocation,
   CommandReply,
@@ -15,15 +17,29 @@ export type DispatchResult =
   | { readonly kind: "unknown-command"; readonly commandName: string; readonly reply: CommandReply }
   | { readonly kind: "failed"; readonly commandName: string; readonly reply: CommandReply };
 
+export interface PressResult {
+  readonly kind: "handled" | "unknown-button" | "failed";
+  // The name at the start of the button's custom ID.
+  readonly commandName: string;
+  readonly response: ButtonResponse;
+}
+
 export interface Registry {
   readonly commandDefinitions: readonly CommandDefinition[];
   readonly dispatch: (invocation: CommandInvocation) => Promise<DispatchResult>;
   readonly autocomplete: (query: AutocompleteQuery) => Promise<readonly AutocompleteChoice[]>;
+  // Sends a button press to the command whose name starts the button's custom ID.
+  readonly press: (press: ButtonPress) => Promise<PressResult>;
 }
 
 const unknownCommandReply: CommandReply = {
   content: "I don't know that command.",
   flags: MessageFlags.Ephemeral,
+};
+
+const unknownButtonResponse: ButtonResponse = {
+  kind: "reply",
+  message: { content: "That button doesn't work any more.", flags: MessageFlags.Ephemeral },
 };
 
 const failedReply: CommandReply = {
@@ -63,6 +79,15 @@ export function createRegistry(
         );
         return [];
       }
+    },
+    press: async (buttonPress) => {
+      const [commandName = ""] = buttonPress.customId.split(":");
+      const press = commandsByName.get(commandName)?.press;
+      if (press === undefined) {
+        logger.warn({ event: "button.unknown", commandName }, "Button press for no command");
+        return { kind: "unknown-button", commandName, response: unknownButtonResponse };
+      }
+      return { kind: "handled", commandName, response: await press(buttonPress) };
     },
     dispatch: async (invocation) => {
       const command = commandsByName.get(invocation.commandName);
