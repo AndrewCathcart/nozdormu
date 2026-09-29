@@ -4,8 +4,9 @@ import {
   registerCommandsIfChanged,
   registerGuildCommands,
   routeInteractions,
+  startScheduler,
 } from "@nozdormu/core";
-import { createCommandRegistrationStore } from "@nozdormu/db";
+import { createCommandRegistrationStore, createJobRunStore } from "@nozdormu/db";
 import { Client, Events, GatewayIntentBits, REST } from "discord.js";
 import { createFeatures } from "./features.ts";
 import { connectDatabaseOrExit, exitOnDiscordRejection, loadConfigOrExit } from "./startup.ts";
@@ -17,7 +18,14 @@ async function main(): Promise<void> {
   const { discord } = config;
   const database = await connectDatabaseOrExit(config.database.url, logger);
 
-  const registry = createRegistry(createFeatures(), logger);
+  const features = createFeatures();
+  const registry = createRegistry(features, logger);
+  // Started before anything touches Discord, so bad job definitions fail first and a shutdown
+  // signal always finds it. Jobs talk to Discord over REST, so they don't need the gateway.
+  const scheduler = startScheduler(
+    features.flatMap((feature) => feature.jobs ?? []),
+    { store: createJobRunStore(database.db), logger, stopTimeoutMs: 10_000 },
+  );
   const rest = new REST().setToken(discord.token);
   try {
     const outcome = await registerCommandsIfChanged(discord, registry.commandDefinitions, {
@@ -25,10 +33,14 @@ async function main(): Promise<void> {
       register: (definitions) => registerGuildCommands(rest, discord, definitions),
     });
     logger.info(
-      { event: `commands.${outcome}`, count: registry.commandDefinitions.length },
+      {
+        event: `commands.${outcome}`,
+        commands: registry.commandDefinitions.map((definition) => definition.name),
+      },
       outcome === "registered" ? "Commands registered" : "Commands unchanged since last start",
     );
   } catch (error) {
+    await scheduler.stop();
     await database.close();
     exitOnDiscordRejection(error, logger);
   }
@@ -42,8 +54,9 @@ async function main(): Promise<void> {
   for (const signal of ["SIGINT", "SIGTERM"] as const) {
     process.once(signal, () => {
       logger.info({ event: "bot.stopping", signal }, "Stopping");
-      client
-        .destroy()
+      scheduler
+        .stop()
+        .then(() => client.destroy())
         .then(() => database.close())
         .then(() => {
           logger.info({ event: "bot.stopped" }, "Stopped");
@@ -59,6 +72,7 @@ async function main(): Promise<void> {
   try {
     await client.login(discord.token);
   } catch (error) {
+    await scheduler.stop();
     await database.close();
     exitOnDiscordRejection(error, logger);
   }

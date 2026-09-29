@@ -1,22 +1,24 @@
 // Starts the bot against the Dev app, waits until it's ready, checks that Discord has exactly the
-// bot's commands registered for the test server, then stops it. Needs a filled-in .env.
+// commands the bot says it registered for the test server, then stops it. Needs a filled-in .env.
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 import { REST, Routes } from "discord.js";
 import { z } from "zod";
 import { loadConfig } from "../src/config.ts";
-import { createFeatures } from "../src/features.ts";
 
 const timeoutMs = 30_000;
 
 const logLine = z.object({ event: z.string() });
+const commandsLine = z.object({
+  event: z.enum(["commands.registered", "commands.unchanged"]),
+  commands: z.array(z.string()),
+});
 const registeredCommands = z.array(z.object({ name: z.string() }));
 
-function eventOf(line: string): string | undefined {
+function parseJson(line: string): unknown {
   try {
-    const parsed = logLine.safeParse(JSON.parse(line));
-    return parsed.success ? parsed.data.event : undefined;
+    return JSON.parse(line);
   } catch {
     return undefined;
   }
@@ -32,9 +34,8 @@ if (!loaded.ok) {
   process.exit(1);
 }
 const { discord } = loaded.config;
-const expected = createFeatures()
-  .flatMap((feature) => feature.commands.map((command) => command.definition.name))
-  .toSorted();
+// The command names the bot logs when it registers (or skips registering) its commands.
+let expected: string[] | undefined;
 
 const bot = spawn(process.execPath, [fileURLToPath(new URL("../src/main.ts", import.meta.url))], {
   stdio: ["ignore", "pipe", "inherit"],
@@ -57,9 +58,20 @@ bot.on("exit", (code) => {
 
 createInterface({ input: bot.stdout }).on("line", (line) => {
   console.log(line);
-  if (eventOf(line) !== "bot.ready") {
+  const parsed = parseJson(line);
+  const commands = commandsLine.safeParse(parsed);
+  if (commands.success) {
+    expected = commands.data.commands.toSorted();
+  }
+  const event = logLine.safeParse(parsed);
+  if (!event.success || event.data.event !== "bot.ready") {
     return;
   }
+  if (expected === undefined) {
+    finish(1, "Smoke run failed: the bot got ready without logging which commands it has.");
+    return;
+  }
+  const expectedNames = expected;
   clearTimeout(timer);
   new REST()
     .setToken(discord.token)
@@ -69,10 +81,10 @@ createInterface({ input: bot.stdout }).on("line", (line) => {
         .parse(body)
         .map((command) => command.name)
         .toSorted();
-      if (actual.join() !== expected.join()) {
+      if (actual.join() !== expectedNames.join()) {
         finish(
           1,
-          `Smoke run failed: Discord has ${listCommands(actual)}, but the bot defines ${listCommands(expected)}.`,
+          `Smoke run failed: Discord has ${listCommands(actual)}, but the bot defines ${listCommands(expectedNames)}.`,
         );
         return;
       }

@@ -32,7 +32,7 @@ export function createRegistry(
   features: readonly Feature[],
   logger: Pick<Logger, "warn" | "error">,
 ): Registry {
-  const commands = features.flatMap((feature) => feature.commands);
+  const commands = features.flatMap((feature) => feature.commands ?? []);
   const commandsByName = new Map<string, SlashCommand>();
   for (const command of commands) {
     if (commandsByName.has(command.definition.name)) {
