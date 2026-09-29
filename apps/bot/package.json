@@ -11,6 +11,7 @@
     "job": "node --env-file-if-exists=../../.env scripts/run-job.ts"
   },
   "dependencies": {
+    "@nozdormu/blueposts": "workspace:*",
     "@nozdormu/core": "workspace:*",
     "@nozdormu/db": "workspace:*",
     "@nozdormu/gamedata": "workspace:*",

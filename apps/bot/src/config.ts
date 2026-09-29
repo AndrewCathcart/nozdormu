@@ -13,6 +13,10 @@ export interface Config {
     // The Discord channel new ScotteJaye videos are posted in.
     readonly alertChannelId: string;
   };
+  readonly foreverNews: {
+    // The Discord channel Forever news is posted in, such as Blizzard staff forum posts.
+    readonly channelId: string;
+  };
 }
 
 export type ConfigResult =
@@ -45,6 +49,7 @@ const envSchema = z.object({
   DISCORD_GUILD_ID: discordId("DISCORD_GUILD_ID"),
   DATABASE_URL: postgresUrl("DATABASE_URL"),
   YOUTUBE_ALERT_CHANNEL_ID: discordId("YOUTUBE_ALERT_CHANNEL_ID"),
+  FOREVER_NEWS_CHANNEL_ID: discordId("FOREVER_NEWS_CHANNEL_ID"),
 });
 
 export function loadConfig(env: Readonly<Record<string, string | undefined>>): ConfigResult {
@@ -62,6 +67,7 @@ export function loadConfig(env: Readonly<Record<string, string | undefined>>): C
       },
       database: { url: parsed.data.DATABASE_URL },
       youtube: { alertChannelId: parsed.data.YOUTUBE_ALERT_CHANNEL_ID },
+      foreverNews: { channelId: parsed.data.FOREVER_NEWS_CHANNEL_ID },
     },
   };
 }

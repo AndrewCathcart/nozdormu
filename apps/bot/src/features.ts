@@ -9,6 +9,13 @@ import {
 } from "@nozdormu/core";
 import type { Database } from "@nozdormu/db";
 import {
+  createBluePostsFeature,
+  createForumReader,
+  createSeenPostStore,
+  type ForumReader,
+  type SeenPostStore,
+} from "@nozdormu/blueposts";
+import {
   createGameDataFeature,
   createGameDataStore,
   createWagoSource,
@@ -37,14 +44,16 @@ export interface FeatureDeps {
   readonly readFeed: FeedReader;
   readonly gameDataStore: GameDataStore;
   readonly gameDataSource: GameDataSource;
-  readonly logger: Pick<Logger, "info">;
+  readonly readStaffPosts: ForumReader;
+  readonly seenStaffPosts: SeenPostStore;
+  readonly logger: Pick<Logger, "info" | "warn">;
 }
 
 export function createFeatureDeps(
   config: Config,
   db: Database,
   rest: REST,
-  logger: Pick<Logger, "info">,
+  logger: Pick<Logger, "info" | "warn">,
 ): FeatureDeps {
   return {
     config,
@@ -55,6 +64,8 @@ export function createFeatureDeps(
     readFeed: readFeedOverHttp,
     gameDataStore: createGameDataStore(db),
     gameDataSource: createWagoSource({ fetch, product: foreverProduct }),
+    readStaffPosts: createForumReader({ fetch, forum: "https://eu.forums.blizzard.com/en/wow" }),
+    seenStaffPosts: createSeenPostStore(db),
   };
 }
 
@@ -73,6 +84,15 @@ export function createFeatures(deps: FeatureDeps): Feature[] {
     createGameDataFeature({
       store: deps.gameDataStore,
       source: deps.gameDataSource,
+      logger: deps.logger,
+    }),
+    createBluePostsFeature({
+      newsChannelId: deps.config.foreverNews.channelId,
+      feed: "eu-forums",
+      readPosts: deps.readStaffPosts,
+      seenPosts: deps.seenStaffPosts,
+      publish: deps.publish,
+      recentPosts: deps.recentPosts,
       logger: deps.logger,
     }),
   ];

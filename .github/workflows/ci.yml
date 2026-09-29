@@ -69,6 +69,7 @@ jobs:
             -e DISCORD_APPLICATION_ID=100000000000000001
             -e DISCORD_GUILD_ID=200000000000000002
             -e YOUTUBE_ALERT_CHANNEL_ID=300000000000000003
+            -e FOREVER_NEWS_CHANNEL_ID=300000000000000007
             -e DATABASE_URL=postgres://postgres@localhost:5433/postgres"
           docker run --rm --network host $settings nozdormu node apps/bot/src/migrate.ts | tee first.log
           grep -q '"event":"migrations.applied"' first.log

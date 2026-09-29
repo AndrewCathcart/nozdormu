@@ -57,6 +57,13 @@
       "when": 1790686536797,
       "tag": "0007_class_spells",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1790688667396,
+      "tag": "0008_blue_posts",
+      "breakpoints": true
     }
   ]
 }

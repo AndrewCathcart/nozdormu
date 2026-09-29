@@ -7,6 +7,7 @@ const validEnv = {
   DISCORD_GUILD_ID: "200000000000000002",
   DATABASE_URL: "postgres://made-up-user:made-up-password@localhost:5432/nozdormu",
   YOUTUBE_ALERT_CHANNEL_ID: "300000000000000003",
+  FOREVER_NEWS_CHANNEL_ID: "300000000000000007",
 };
 
 describe("loadConfig", () => {
@@ -21,6 +22,7 @@ describe("loadConfig", () => {
         },
         database: { url: "postgres://made-up-user:made-up-password@localhost:5432/nozdormu" },
         youtube: { alertChannelId: "300000000000000003" },
+        foreverNews: { channelId: "300000000000000007" },
       },
     });
   });
@@ -34,6 +36,7 @@ describe("loadConfig", () => {
           "DISCORD_GUILD_ID is missing.",
           "DATABASE_URL is missing.",
           "YOUTUBE_ALERT_CHANNEL_ID is missing.",
+          "FOREVER_NEWS_CHANNEL_ID is missing.",
         ],
       },
     );

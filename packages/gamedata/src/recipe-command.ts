@@ -1,7 +1,12 @@
-import { type CommandReply, maxAutocompleteChoices, type SlashCommand } from "@nozdormu/core";
+import {
+  type CommandReply,
+  escapeMarkdown,
+  maxAutocompleteChoices,
+  type SlashCommand,
+} from "@nozdormu/core";
 import { ApplicationCommandOptionType, MessageFlags } from "discord-api-types/v10";
 import type { GameDataStore } from "./game-data-store.ts";
-import { escapeMarkdown, notLoaded, parseId, toChoices } from "./lookup.ts";
+import { notLoaded, parseId, toChoices } from "./lookup.ts";
 import type { RecipeRecord } from "./recipes.ts";
 
 // Builds imported before recipes were (import format 1) have none until the next build check.

@@ -119,3 +119,24 @@ export const classSpells = pgTable(
     index("class_spells_class_level").on(table.classId, table.level),
   ],
 );
+
+// Forum staff-post feeds the Forever news channel has checked at least once, so an empty first
+// check still counts. The baseline is the newest post's time at that first check: an unseen post no
+// newer than it was already there (or has resurfaced, say after a newer one was deleted), not new.
+export const bluePostFeeds = pgTable("blue_post_feeds", {
+  feed: text("feed").primaryKey(),
+  firstCheckedAt: timestamp("first_checked_at", { withTimezone: true }).notNull().defaultNow(),
+  baselineCreatedAt: timestamp("baseline_created_at", { withTimezone: true }),
+});
+
+// Staff posts each feed has seen: posted, or already there at the first check. Keyed by the
+// forum's post ID.
+export const bluePosts = pgTable(
+  "blue_posts",
+  {
+    feed: text("feed").notNull(),
+    postId: integer("post_id").notNull(),
+    seenAt: timestamp("seen_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [primaryKey({ columns: [table.feed, table.postId] })],
+);
