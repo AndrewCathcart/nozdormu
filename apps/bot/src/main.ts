@@ -4,8 +4,9 @@ import {
   registerCommandsIfChanged,
   registerGuildCommands,
   routeInteractions,
+  startScheduler,
 } from "@nozdormu/core";
-import { createCommandRegistrationStore } from "@nozdormu/db";
+import { createCommandRegistrationStore, createJobRunStore } from "@nozdormu/db";
 import { Client, Events, GatewayIntentBits, REST } from "discord.js";
 import { createFeatures } from "./features.ts";
 import { connectDatabaseOrExit, exitOnDiscordRejection, loadConfigOrExit } from "./startup.ts";
@@ -17,34 +18,28 @@ async function main(): Promise<void> {
   const { discord } = config;
   const database = await connectDatabaseOrExit(config.database.url, logger);
 
-  const registry = createRegistry(createFeatures(), logger);
+  const features = createFeatures();
+  const registry = createRegistry(features, logger);
   const rest = new REST().setToken(discord.token);
-  try {
-    const outcome = await registerCommandsIfChanged(discord, registry.commandDefinitions, {
-      store: createCommandRegistrationStore(database.db),
-      register: (definitions) => registerGuildCommands(rest, discord, definitions),
-    });
-    logger.info(
-      { event: `commands.${outcome}`, count: registry.commandDefinitions.length },
-      outcome === "registered" ? "Commands registered" : "Commands unchanged since last start",
-    );
-  } catch (error) {
-    await database.close();
-    exitOnDiscordRejection(error, logger);
-  }
-
   const client = new Client({ intents: [GatewayIntentBits.Guilds] });
-  routeInteractions(client, rest, registry, logger);
-  client.once(Events.ClientReady, (ready) => {
-    logger.info({ event: "bot.ready", user: ready.user.tag }, "Bot ready");
-  });
+  // Started before anything touches Discord, so bad job definitions fail first. Jobs talk to
+  // Discord over REST, so they don't need the gateway.
+  const scheduler = startScheduler(
+    features.flatMap((feature) => feature.jobs ?? []),
+    { store: createJobRunStore(database.db), logger, stopTimeoutMs: 10_000 },
+  );
 
+  const shutDown = async (): Promise<void> => {
+    await scheduler.stop();
+    await client.destroy();
+    await database.close();
+  };
+
+  // Installed straight after the scheduler starts, so a signal at any later point stops it.
   for (const signal of ["SIGINT", "SIGTERM"] as const) {
     process.once(signal, () => {
       logger.info({ event: "bot.stopping", signal }, "Stopping");
-      client
-        .destroy()
-        .then(() => database.close())
+      shutDown()
         .then(() => {
           logger.info({ event: "bot.stopped" }, "Stopped");
           process.exit(0);
@@ -57,9 +52,31 @@ async function main(): Promise<void> {
   }
 
   try {
+    const outcome = await registerCommandsIfChanged(discord, registry.commandDefinitions, {
+      store: createCommandRegistrationStore(database.db),
+      register: (definitions) => registerGuildCommands(rest, discord, definitions),
+    });
+    logger.info(
+      {
+        event: `commands.${outcome}`,
+        commands: registry.commandDefinitions.map((definition) => definition.name),
+      },
+      outcome === "registered" ? "Commands registered" : "Commands unchanged since last start",
+    );
+  } catch (error) {
+    await shutDown();
+    exitOnDiscordRejection(error, logger);
+  }
+
+  routeInteractions(client, rest, registry, logger);
+  client.once(Events.ClientReady, (ready) => {
+    logger.info({ event: "bot.ready", user: ready.user.tag }, "Bot ready");
+  });
+
+  try {
     await client.login(discord.token);
   } catch (error) {
-    await database.close();
+    await shutDown();
     exitOnDiscordRejection(error, logger);
   }
 }

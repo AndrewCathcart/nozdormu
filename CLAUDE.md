@@ -48,13 +48,14 @@ Built so far:
 - `apps/bot` is the process. `src/main.ts` loads config (`loadConfig` validates the environment and names bad settings without echoing values), connects to Postgres, builds the registry from `createFeatures()`, registers commands if they changed since the last start, connects to the gateway, and disconnects cleanly on SIGINT or SIGTERM. `src/migrate.ts` applies pending migrations; Railway will run it before each deploy. Both use `src/startup.ts`, which exits with a message naming the setting when config is invalid, Postgres refuses the connection, or Discord rejects a setting during registration or login. `src/startup-failures.ts` turns Discord's and Postgres's rejections into those messages.
 - `packages/core` holds the feature registry (`createRegistry`), the Discord adapter (`registerGuildCommands`, `routeInteractions`), `registerCommandsIfChanged`, `createLogger` and `serializeError`. The registry refuses duplicate command names and dispatches each command to its handler. Every dispatch result carries the reply to send: an unknown command or a handler that throws gets a private error reply and a log entry, never a crash. The adapter sends that reply through Discord's interaction callback. Keep the core thin.
 - `packages/db` holds the Drizzle schema (`src/schema.ts`), the committed migrations (`migrations/`), `connectDatabase` (which runs `select 1`, so a bad URL fails straight away), `runMigrations` (which returns how many it applied), and the Postgres stores, such as `createCommandRegistrationStore`. `@nozdormu/db/testing` gives each test file its own database.
+- `packages/core` also holds the scheduler (`startScheduler`). A `Feature` declares its `commands` and scheduled `jobs`, leaving out what it doesn't use. The bot starts the scheduler before it registers commands or logs in (jobs use Discord's REST API, not the gateway), and on shutdown stops it first, then Discord, then the database.
 - `packages/ping` is the `/ping` feature.
 - Each feature package exports a factory, such as `createPingFeature()`, that takes the feature's injected dependencies (for example the Discord REST client, the database, the Claude client, a clock) and returns a `Feature`. Command handlers take a parsed `CommandInvocation` and return a `Promise<CommandReply>`. That's the main testing seam.
 - Internal packages are source-only: `exports` points at `src/*.ts`, and dependents use `workspace:*`. Shared dependency versions live in the `catalog` in `pnpm-workspace.yaml`.
 
 Planned:
 
-- The core gains the scheduler, and the bot starts it. Features also export autocomplete handlers, event handlers and scheduled jobs.
+- Features also export autocomplete handlers and event handlers.
 
 ## Discord
 
@@ -68,7 +69,11 @@ Planned:
 
 ## Scheduling and time
 
-- The scheduler runs in-process. Each job's last run time is stored in Postgres, so a job missed during a restart or deploy runs when the bot starts.
+- The scheduler runs in-process, on intervals of 1 ms to about 24.8 days (setTimeout's limit). Each job's name is unique (e.g. `youtube.poll`).
+- Before each run, the scheduler claims it in the `job_runs` table: one atomic statement records the start time, but only if the job is due (never ran, or its last run started at least one interval earlier). So two processes (say, old and new during a deploy) never both start the same interval's run, and a run that dies halfway isn't repeated until its next interval. Jobs run at most once per interval. The claim isn't a lock: a run that outlasts its interval could overlap the next one in another process, so keep runs well within their interval. The scheduler logs `job.overrunning` when a run is still going one interval after it started.
+- At startup, a job that never ran or fell due while the bot was down is tried straight away; otherwise it waits until one interval after its last start, and never longer than one interval. If the last run can't be looked up, it's tried straight away and the claim decides. If the claim itself fails (`job.claim_failed`), the job doesn't run and is tried again an interval later.
+- A job that throws is logged as `job.failed` and runs again at its next interval. Each finished run is logged as `job.finished` with its duration.
+- Stopping the scheduler starts no new runs (a claim that comes back after stopping is skipped, so that interval's run is lost), waits up to 10 seconds for runs in progress, then logs `scheduler.stop_timed_out` naming any it gave up on. The bot installs its SIGINT/SIGTERM handlers straight after starting the scheduler.
 - The guild plays on EU realms. Server time is one config setting, defaulting to `Europe/Paris`.
 - Handlers get the time from the injected clock, never from the system clock directly.
 
@@ -84,7 +89,7 @@ Planned:
 
 - `pnpm check` runs everything CI runs: format check, lint, typecheck and tests.
 - `pnpm dev` runs the bot against the Dev app and restarts it on changes. `pnpm start` runs it once.
-- `pnpm smoke` starts the bot, waits for its ready log line, checks through Discord's API that exactly the bot's commands are registered, then stops it.
+- `pnpm smoke` starts the bot, waits for its ready log line, checks through Discord's API that Discord has exactly the commands the bot logged as its own, then stops it.
 - `pnpm fmt` formats every file. `pnpm lint`, `pnpm typecheck` and `pnpm test` run one step each.
 - `pnpm test <path>` runs a single test file. Tests need the DBngin "nozdormu" server running.
 - `pnpm db:migrate` applies pending migrations to `DATABASE_URL` and logs how many it applied. `pnpm db:generate` writes a migration from schema changes.
@@ -113,4 +118,4 @@ Planned:
 
 - On push to `main`, after CI passes, a deploy job runs `railway up` with a Railway project token, in a `production` environment with a concurrency group. Don't rely on Railway's "Wait for CI" setting instead.
 - Railway service settings live in `railway.toml`, which overrides the dashboard.
-- Railway stops the old deployment with SIGTERM, then SIGKILL. Start the bot with `node` directly, not through `pnpm`, so the signal reaches it. Set `drainingSeconds` so `client.destroy()` has time to finish; Railway's docs don't state the default, and one report says it's 0.
+- Railway stops the old deployment with SIGTERM, then SIGKILL. Start the bot with `node` directly, not through `pnpm`, so the signal reaches it. Set `drainingSeconds` to about 20, so shutdown can finish: the scheduler waits up to 10 seconds for running jobs, then Discord and the database close. Railway's docs don't state the default, and one report says it's 0.
