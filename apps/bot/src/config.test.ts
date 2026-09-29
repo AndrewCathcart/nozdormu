@@ -8,6 +8,7 @@ const validEnv = {
   DATABASE_URL: "postgres://made-up-user:made-up-password@localhost:5432/nozdormu",
   YOUTUBE_ALERT_CHANNEL_ID: "300000000000000003",
   ANTHROPIC_API_KEY: "made-up-key",
+  OPENAI_API_KEY: "made-up-openai-key",
   DIGEST_CHANNEL_IDS: "300000000000000004,300000000000000005",
   DIGEST_POST_CHANNEL_ID: "300000000000000006",
 };
@@ -25,6 +26,7 @@ describe("loadConfig", () => {
         database: { url: "postgres://made-up-user:made-up-password@localhost:5432/nozdormu" },
         youtube: { alertChannelId: "300000000000000003" },
         anthropic: { apiKey: "made-up-key" },
+        openai: { apiKey: "made-up-openai-key" },
         digest: {
           channelIds: ["300000000000000004", "300000000000000005"],
           postChannelId: "300000000000000006",
@@ -43,6 +45,7 @@ describe("loadConfig", () => {
           "DATABASE_URL is missing.",
           "YOUTUBE_ALERT_CHANNEL_ID is missing.",
           "ANTHROPIC_API_KEY is missing.",
+          "OPENAI_API_KEY is missing.",
           "DIGEST_CHANNEL_IDS is missing.",
           "DIGEST_POST_CHANNEL_ID is missing.",
         ],

@@ -13,6 +13,7 @@ export interface ClaudeWriterDeps {
 
 const digestFormat = z.object({
   sections: z.array(z.object({ heading: z.string(), body: z.string() })),
+  illustration: z.string(),
 });
 
 // Only the JSON schema, without the SDK's parser: its errors can quote the reply, which is written

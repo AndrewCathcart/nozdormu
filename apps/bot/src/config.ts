@@ -16,6 +16,10 @@ export interface Config {
   readonly anthropic: {
     readonly apiKey: string;
   };
+  // Paints the weekly digest's picture.
+  readonly openai: {
+    readonly apiKey: string;
+  };
   readonly digest: {
     // The channels whose chat the weekly digest covers.
     readonly channelIds: readonly string[];
@@ -66,6 +70,7 @@ const envSchema = z.object({
   DATABASE_URL: postgresUrl("DATABASE_URL"),
   YOUTUBE_ALERT_CHANNEL_ID: discordId("YOUTUBE_ALERT_CHANNEL_ID"),
   ANTHROPIC_API_KEY: required("ANTHROPIC_API_KEY"),
+  OPENAI_API_KEY: required("OPENAI_API_KEY"),
   DIGEST_CHANNEL_IDS: discordIdList("DIGEST_CHANNEL_IDS"),
   DIGEST_POST_CHANNEL_ID: discordId("DIGEST_POST_CHANNEL_ID"),
 });
@@ -86,6 +91,7 @@ export function loadConfig(env: Readonly<Record<string, string | undefined>>): C
       database: { url: parsed.data.DATABASE_URL },
       youtube: { alertChannelId: parsed.data.YOUTUBE_ALERT_CHANNEL_ID },
       anthropic: { apiKey: parsed.data.ANTHROPIC_API_KEY },
+      openai: { apiKey: parsed.data.OPENAI_API_KEY },
       digest: {
         channelIds: parsed.data.DIGEST_CHANNEL_IDS,
         postChannelId: parsed.data.DIGEST_POST_CHANNEL_ID,

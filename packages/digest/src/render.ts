@@ -61,10 +61,12 @@ function addSection(packer: MessagePacker, section: Section): void {
   }
 }
 
-// The digest as Discord messages, in posting order, under a masthead giving the week.
-export function renderDigest(week: Week, digest: Digest): string[] {
+// The digest as Discord messages, in posting order: a masthead giving the week, on its own so the
+// week's picture can go with it, then the sections.
+export function renderDigest(week: Week, digest: Pick<Digest, "sections">): string[] {
   const packer = new MessagePacker();
   packer.add(`# 📰 This week in the guild\n-# ${weekDates(week)}`, "");
+  packer.finishMessage();
   for (const section of digest.sections) {
     addSection(packer, section);
   }

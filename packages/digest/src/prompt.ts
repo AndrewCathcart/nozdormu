@@ -21,7 +21,12 @@ Rules:
 Format:
 - Sections in this order, leaving out any with nothing in it: "Decided", "Coming up", "Still open", "What people talked about", "Highlights".
 - Mostly short bullet points ("- " at the start of a line), with the key word or date in bold. Discord markdown only, and no headings, links or @mentions inside a section.
-- As short as the week allows: a quiet week might need 100 words, a busy one up to 500.`;
+- As short as the week allows: a quiet week might need 100 words, a busy one up to 500.
+
+The picture:
+- The catch-up is posted under a painted picture of the week. In "illustration", describe one scene for the painter in two to four sentences: the week's biggest moment or its overall mood, as it might look in a high-fantasy world.
+- Show members as fantasy figures by race and class, such as "a dwarf warrior" or "a gnome mage", never by name, and use plain fantasy words rather than the names of games, places, bosses or items.
+- Nothing sensitive, no real people, nothing gory, and no writing in the picture.`;
 
 // The week's chat, wrapped so it's clearly separate from the request.
 export function userPrompt(transcript: string, week: Week): string {

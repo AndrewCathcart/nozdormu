@@ -87,12 +87,25 @@ export function routeInteractions(
 
 export type ChannelMessage = RESTPostAPIChannelMessageJSONBody;
 
-// Posts a message in a channel through Discord's REST API.
-export type ChannelPublisher = (channelId: string, message: ChannelMessage) => Promise<void>;
+// A file uploaded with a message, such as a picture.
+export interface MessageFile {
+  readonly fileName: string;
+  readonly data: Uint8Array;
+}
 
-export function createChannelPublisher(rest: REST): ChannelPublisher {
-  return async (channelId, message) => {
-    await rest.post(Routes.channelMessages(channelId), { body: message });
+// Posts a message in a channel through Discord's REST API, uploading any files with it.
+export type ChannelPublisher = (
+  channelId: string,
+  message: ChannelMessage,
+  files?: readonly MessageFile[],
+) => Promise<void>;
+
+export function createChannelPublisher(rest: Pick<REST, "post">): ChannelPublisher {
+  return async (channelId, message, files = []) => {
+    await rest.post(Routes.channelMessages(channelId), {
+      body: message,
+      files: files.map((file) => ({ name: file.fileName, data: file.data })),
+    });
   };
 }
 

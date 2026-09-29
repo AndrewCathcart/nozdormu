@@ -7,7 +7,7 @@ import {
 } from "@nozdormu/core";
 import { MessageFlags } from "discord-api-types/v10";
 import { type ChatReader, latestChat, type Week } from "./chat.ts";
-import type { DigestWriter } from "./digest.ts";
+import type { DigestWriter, Illustration, Illustrator } from "./digest.ts";
 import { renderDigest } from "./render.ts";
 import { ukTimeZone } from "./uk-time.ts";
 
@@ -18,9 +18,11 @@ export interface DigestFeatureDeps {
   readonly postChannelId: string;
   readonly readChat: ChatReader;
   readonly write: DigestWriter;
+  // Paints the picture posted with the masthead.
+  readonly draw: Illustrator;
   readonly publish: ChannelPublisher;
   readonly now: () => Date;
-  readonly logger: Pick<Logger, "info">;
+  readonly logger: Pick<Logger, "info" | "error">;
 }
 
 // Of transcript: about 100,000 tokens, roughly $0.40 of input to Claude Opus 5.5.
@@ -44,6 +46,19 @@ function latestWeek(now: Date): Week {
 // Every Monday morning, posts a catch-up on the week's chat, so members don't have to scroll back
 // through all of it.
 export function createDigestFeature(deps: DigestFeatureDeps): Feature {
+  // A digest without its picture is still worth posting.
+  const drawPicture = async (scene: string): Promise<Illustration | undefined> => {
+    try {
+      return await deps.draw(scene);
+    } catch (error) {
+      deps.logger.error(
+        { event: "digest.illustration_failed", err: error },
+        "Couldn't draw this week's picture, so the digest goes without one",
+      );
+      return undefined;
+    }
+  };
+
   const publishDigest = async (): Promise<void> => {
     const week = latestWeek(deps.now());
     const weekOfChat = await deps.readChat(deps.channelIds, week);
@@ -65,16 +80,21 @@ export function createDigestFeature(deps: DigestFeatureDeps): Feature {
     if (digest.sections.length === 0) {
       throw new Error("Claude wrote a digest with no sections.");
     }
+    const picture = await drawPicture(digest.illustration);
     const messages = renderDigest(week, digest);
     const postedOn = week.to.toISOString().slice(0, 10);
     for (const [index, content] of messages.entries()) {
-      await deps.publish(deps.postChannelId, {
-        content,
-        allowed_mentions: { parse: [] },
-        flags: MessageFlags.SuppressEmbeds,
-        nonce: `digest-${postedOn}-${String(index)}`,
-        enforce_nonce: true,
-      });
+      await deps.publish(
+        deps.postChannelId,
+        {
+          content,
+          allowed_mentions: { parse: [] },
+          flags: MessageFlags.SuppressEmbeds,
+          nonce: `digest-${postedOn}-${String(index)}`,
+          enforce_nonce: true,
+        },
+        index === 0 && picture !== undefined ? [picture] : [],
+      );
     }
     deps.logger.info(
       {

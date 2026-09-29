@@ -1,7 +1,7 @@
 import type { ChannelPublisher, Logger, ScheduledJob } from "@nozdormu/core";
 import { describe, expect, it, vi } from "vitest";
 import type { ChatChannel, ChatReader } from "./chat.ts";
-import type { Digest, DigestWriter } from "./digest.ts";
+import type { Digest, DigestWriter, Illustration, Illustrator } from "./digest.ts";
 import { createDigestFeature, type DigestFeatureDeps } from "./feature.ts";
 import { chatMessage, lastWeek } from "./test-chat.ts";
 
@@ -19,7 +19,13 @@ const someChat = [
 
 const aDigest = {
   sections: [{ heading: "Decided", body: "- Brannoc has made a spreadsheet." }],
+  illustration: "A dwarf warrior proudly unrolls an enormous spreadsheet across a tavern table.",
 } satisfies Digest;
+
+const aPicture = {
+  data: new Uint8Array([1, 2, 3]),
+  fileName: "this-week.jpg",
+} satisfies Illustration;
 
 function createDeps(chat: ChatChannel[] = someChat, digest: Digest = aDigest) {
   return {
@@ -27,9 +33,13 @@ function createDeps(chat: ChatChannel[] = someChat, digest: Digest = aDigest) {
     postChannelId: postId,
     readChat: vi.fn<ChatReader>().mockResolvedValue(chat),
     write: vi.fn<DigestWriter>().mockResolvedValue(digest),
+    draw: vi.fn<Illustrator>().mockResolvedValue(aPicture),
     publish: vi.fn<ChannelPublisher>().mockResolvedValue(undefined),
     now: () => tuesday,
-    logger: { info: vi.fn<Logger["info"]>() } satisfies Pick<Logger, "info">,
+    logger: {
+      info: vi.fn<Logger["info"]>(),
+      error: vi.fn<Logger["error"]>(),
+    } satisfies Pick<Logger, "info" | "error">,
   } satisfies DigestFeatureDeps;
 }
 
@@ -59,27 +69,59 @@ describe("createDigestFeature", () => {
     expect(deps.readChat).toHaveBeenCalledExactlyOnceWith([generalId, raidsId], lastWeek);
   });
 
-  it("posts the digest Claude wrote in the digest channel, pinging nobody", async () => {
+  it("posts the masthead with a picture of the scene Claude described, then the digest, pinging nobody", async () => {
     const deps = createDeps();
 
     await publishJob(deps).run();
 
     expect(deps.write).toHaveBeenCalledExactlyOnceWith(someChat, lastWeek);
-    expect(deps.publish).toHaveBeenCalledExactlyOnceWith(postId, {
-      content: [
-        "# 📰 This week in the guild",
-        "-# Monday 21 September to Monday 28 September 2026",
-        "",
-        "## Decided",
-        "- Brannoc has made a spreadsheet.",
-      ].join("\n"),
-      allowed_mentions: { parse: [] },
-      // No link previews.
-      flags: 4,
-      // Discord drops a repeat of the same message sent within a few minutes.
-      nonce: "digest-2026-09-28-0",
-      enforce_nonce: true,
-    });
+    expect(deps.draw).toHaveBeenCalledExactlyOnceWith(
+      "A dwarf warrior proudly unrolls an enormous spreadsheet across a tavern table.",
+    );
+    expect(deps.publish.mock.calls).toEqual([
+      [
+        postId,
+        {
+          content:
+            "# 📰 This week in the guild\n-# Monday 21 September to Monday 28 September 2026",
+          allowed_mentions: { parse: [] },
+          // No link previews.
+          flags: 4,
+          // Discord drops a repeat of the same message sent within a few minutes.
+          nonce: "digest-2026-09-28-0",
+          enforce_nonce: true,
+        },
+        [aPicture],
+      ],
+      [
+        postId,
+        {
+          content: "## Decided\n- Brannoc has made a spreadsheet.",
+          allowed_mentions: { parse: [] },
+          flags: 4,
+          nonce: "digest-2026-09-28-1",
+          enforce_nonce: true,
+        },
+        [],
+      ],
+    ]);
+  });
+
+  it("posts the digest without a picture when drawing it fails, and logs why", async () => {
+    const deps = createDeps();
+    const failure = new Error("OpenAI answered HTTP 400 (moderation_blocked) instead of drawing.");
+    deps.draw.mockRejectedValue(failure);
+
+    await publishJob(deps).run();
+
+    expect(deps.publish.mock.calls.map(([, message, files]) => [message.content, files])).toEqual([
+      ["# 📰 This week in the guild\n-# Monday 21 September to Monday 28 September 2026", []],
+      ["## Decided\n- Brannoc has made a spreadsheet.", []],
+    ]);
+    expect(deps.logger.error).toHaveBeenCalledExactlyOnceWith(
+      { event: "digest.illustration_failed", err: failure },
+      "Couldn't draw this week's picture, so the digest goes without one",
+    );
   });
 
   it("skips a week when nobody wrote anything, without asking Claude", async () => {
@@ -99,7 +141,7 @@ describe("createDigestFeature", () => {
   });
 
   it("fails without posting when Claude writes no sections", async () => {
-    const deps = createDeps(someChat, { sections: [] });
+    const deps = createDeps(someChat, { ...aDigest, sections: [] });
 
     await expect(publishJob(deps).run()).rejects.toThrow(
       new Error("Claude wrote a digest with no sections."),
@@ -113,7 +155,7 @@ describe("createDigestFeature", () => {
     await publishJob(deps).run();
 
     expect(deps.logger.info).toHaveBeenCalledExactlyOnceWith(
-      { event: "digest.published", chatMessages: 1, sections: 1, discordMessages: 1 },
+      { event: "digest.published", chatMessages: 1, sections: 1, discordMessages: 2 },
       "Published this week's digest",
     );
   });

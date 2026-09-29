@@ -29,7 +29,9 @@ import {
   createClaudeWriter,
   createDigestFeature,
   createDiscordChatReader,
+  createOpenAiIllustrator,
   type DigestWriter,
+  type Illustrator,
 } from "@nozdormu/digest";
 import { createPingFeature } from "@nozdormu/ping";
 import {
@@ -54,6 +56,7 @@ export interface FeatureDeps {
   readonly gameDataSource: GameDataSource;
   readonly readChat: ChatReader;
   readonly writeDigest: DigestWriter;
+  readonly drawIllustration: Illustrator;
   readonly now: () => Date;
   readonly logger: Pick<Logger, "info" | "error">;
   readonly readSpyglass: SpyglassReader;
@@ -80,6 +83,7 @@ export function createFeatureDeps(
       client: new Anthropic({ apiKey: config.anthropic.apiKey, maxRetries: 4 }),
       logger,
     }),
+    drawIllustration: createOpenAiIllustrator({ fetch, apiKey: config.openai.apiKey, logger }),
     now: () => new Date(),
     readSpyglass: createSpyglassReader({ fetch }),
     dungeonStore: createDungeonStore(db),
@@ -108,6 +112,7 @@ export function createFeatures(deps: FeatureDeps): Feature[] {
       postChannelId: deps.config.digest.postChannelId,
       readChat: deps.readChat,
       write: deps.writeDigest,
+      draw: deps.drawIllustration,
       publish: deps.publish,
       now: deps.now,
       logger: deps.logger,
