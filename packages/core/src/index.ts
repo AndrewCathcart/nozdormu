@@ -18,6 +18,7 @@ export {
 } from "./discord.ts";
 export type { ChannelMessage, ChannelPublisher, RecentPostReader } from "./discord.ts";
 export { serializeError } from "./errors.ts";
+export { escapeMarkdown } from "./markdown.ts";
 export type { SerializedError } from "./errors.ts";
 export { registerCommandsIfChanged } from "./command-registration.ts";
 export type {

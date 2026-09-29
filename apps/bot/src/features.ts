@@ -10,6 +10,13 @@ import {
 } from "@nozdormu/core";
 import type { Database } from "@nozdormu/db";
 import {
+  createDungeonFeature,
+  createDungeonStore,
+  createSpyglassReader,
+  type DungeonStore,
+  type SpyglassReader,
+} from "@nozdormu/dungeons";
+import {
   createGameDataFeature,
   createGameDataStore,
   createWagoSource,
@@ -49,6 +56,8 @@ export interface FeatureDeps {
   readonly writeDigest: DigestWriter;
   readonly now: () => Date;
   readonly logger: Pick<Logger, "info" | "error">;
+  readonly readSpyglass: SpyglassReader;
+  readonly dungeonStore: DungeonStore;
 }
 
 export function createFeatureDeps(
@@ -72,6 +81,8 @@ export function createFeatureDeps(
       logger,
     }),
     now: () => new Date(),
+    readSpyglass: createSpyglassReader({ fetch }),
+    dungeonStore: createDungeonStore(db),
   };
 }
 
@@ -99,6 +110,11 @@ export function createFeatures(deps: FeatureDeps): Feature[] {
       write: deps.writeDigest,
       publish: deps.publish,
       now: deps.now,
+      logger: deps.logger,
+    }),
+    createDungeonFeature({
+      readSpyglass: deps.readSpyglass,
+      store: deps.dungeonStore,
       logger: deps.logger,
     }),
   ];

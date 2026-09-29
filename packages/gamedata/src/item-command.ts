@@ -1,8 +1,13 @@
-import { type CommandReply, maxAutocompleteChoices, type SlashCommand } from "@nozdormu/core";
+import {
+  type CommandReply,
+  escapeMarkdown,
+  maxAutocompleteChoices,
+  type SlashCommand,
+} from "@nozdormu/core";
 import { ApplicationCommandOptionType, MessageFlags } from "discord-api-types/v10";
 import type { GameDataStore } from "./game-data-store.ts";
 import type { ItemRecord } from "./item-sparse.ts";
-import { escapeMarkdown, notLoaded, parseId, toChoices } from "./lookup.ts";
+import { notLoaded, parseId, toChoices } from "./lookup.ts";
 
 const qualityNames: Readonly<Record<number, string>> = {
   0: "Poor",
@@ -115,7 +120,6 @@ export function createItemCommand(
           `**${escapeMarkdown(item.name)}**`,
           describeItem(item),
           `https://www.wowhead.com/forever/item=${String(item.id)}`,
-          "-# Item data from wago.tools",
         ].join("\n"),
         allowed_mentions: { parse: [] },
       };

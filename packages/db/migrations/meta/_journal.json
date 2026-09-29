@@ -50,6 +50,20 @@
       "when": 1790658231979,
       "tag": "0006_enchant_recipes",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1790686536797,
+      "tag": "0007_class_spells",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1790693160818,
+      "tag": "0008_dungeons",
+      "breakpoints": true
     }
   ]
 }

@@ -1,7 +1,15 @@
-import { type Database, gameBuilds, items, recipeReagents, recipes } from "@nozdormu/db";
-import { and, asc, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
+import {
+  classSpells,
+  type Database,
+  gameBuilds,
+  items,
+  recipeReagents,
+  recipes,
+} from "@nozdormu/db";
+import { and, asc, desc, eq, gt, ilike, inArray, min, or, sql } from "drizzle-orm";
+import type { ClassSpell } from "./class-spells.ts";
 import type { ItemRecord } from "./item-sparse.ts";
-import type { RecipeRecord, RecipeResult, SkillLevels } from "./recipes.ts";
+import type { Reagent, RecipeRecord, RecipeResult, SkillLevels } from "./recipes.ts";
 
 export interface ImportedBuild {
   readonly version: string;
@@ -16,6 +24,7 @@ export type RecipeSummary = Pick<RecipeRecord, "spellId" | "name" | "professions
 export interface GameBuild extends ImportedBuild {
   readonly items: readonly ItemRecord[];
   readonly recipes: readonly RecipeRecord[];
+  readonly classSpells: readonly ClassSpell[];
 }
 
 export interface GameDataStore {
@@ -29,9 +38,18 @@ export interface GameDataStore {
   // The names of those of these items that exist, by ID.
   readonly itemNames: (ids: readonly number[]) => Promise<Map<number, string>>;
   readonly getRecipe: (spellId: number) => Promise<RecipeRecord | undefined>;
-  // Recipes whose name, or whose item's name, contains the text: names starting with it first,
-  // then shorter names.
+  // The recipes that make any of these items, in spell ID order.
+  readonly recipesMaking: (itemIds: readonly number[]) => Promise<RecipeRecord[]>;
+  // Recipes whose name, or whose item's name, contains the text: lowest skill level first (where
+  // they turn yellow), so they come in the order you can make them.
   readonly searchRecipes: (text: string, limit: number) => Promise<RecipeSummary[]>;
+  // What a class learns from its trainer at a level, by name.
+  readonly classSpellsAt: (classId: number, level: number) => Promise<ClassSpell[]>;
+  // The first level after this one at which the class learns something, if any.
+  readonly nextClassSpellLevel: (
+    classId: number,
+    afterLevel: number,
+  ) => Promise<number | undefined>;
 }
 
 // Postgres allows 65,535 parameters per statement; at most eight per row keeps this well under.
@@ -67,6 +85,18 @@ function skillLevelsOf(yellowAt: number | null, greyAt: number | null): SkillLev
   return yellowAt === null || greyAt === null ? undefined : { yellowAt, greyAt };
 }
 
+function toRecipe(row: typeof recipes.$inferSelect, reagents: readonly Reagent[]): RecipeRecord {
+  return {
+    spellId: row.spellId,
+    name: row.name,
+    professions: row.professions,
+    result: resultOf(row.itemId, row.itemCount),
+    reagents,
+    skillLevels: skillLevelsOf(row.yellowAt, row.greyAt),
+    taughtBy: row.taughtBy,
+  };
+}
+
 export function createGameDataStore(db: Database): GameDataStore {
   return {
     importedBuild: async () => {
@@ -82,6 +112,7 @@ export function createGameDataStore(db: Database): GameDataStore {
         // Deleting a recipe deletes its reagents too.
         await tx.delete(recipes);
         await tx.delete(items);
+        await tx.delete(classSpells);
         await insertInBatches(build.items, (batch) => tx.insert(items).values(batch));
         await insertInBatches(
           build.recipes.map((recipe) => ({
@@ -105,6 +136,14 @@ export function createGameDataStore(db: Database): GameDataStore {
             })),
           ),
           (batch) => tx.insert(recipeReagents).values(batch),
+        );
+        await insertInBatches(
+          build.classSpells.map((spell) => ({
+            ...spell,
+            rank: spell.rank ?? null,
+            races: [...spell.races],
+          })),
+          (batch) => tx.insert(classSpells).values(batch),
         );
         await tx
           .insert(gameBuilds)
@@ -157,15 +196,42 @@ export function createGameDataStore(db: Database): GameDataStore {
         .from(recipeReagents)
         .where(eq(recipeReagents.spellId, spellId))
         .orderBy(asc(recipeReagents.position));
-      return {
-        spellId: found.spellId,
-        name: found.name,
-        professions: found.professions,
-        result: resultOf(found.itemId, found.itemCount),
-        reagents,
-        skillLevels: skillLevelsOf(found.yellowAt, found.greyAt),
-        taughtBy: found.taughtBy,
-      };
+      return toRecipe(found, reagents);
+    },
+    recipesMaking: async (itemIds) => {
+      if (itemIds.length === 0) {
+        return [];
+      }
+      const found = await db
+        .select()
+        .from(recipes)
+        .where(inArray(recipes.itemId, [...itemIds]))
+        .orderBy(asc(recipes.spellId));
+      if (found.length === 0) {
+        return [];
+      }
+      const reagents = await db
+        .select({
+          spellId: recipeReagents.spellId,
+          itemId: recipeReagents.itemId,
+          count: recipeReagents.count,
+        })
+        .from(recipeReagents)
+        .where(
+          inArray(
+            recipeReagents.spellId,
+            found.map((row) => row.spellId),
+          ),
+        )
+        .orderBy(asc(recipeReagents.position));
+      return found.map((row) =>
+        toRecipe(
+          row,
+          reagents
+            .filter((reagent) => reagent.spellId === row.spellId)
+            .map(({ itemId, count }) => ({ itemId, count })),
+        ),
+      );
     },
     searchRecipes: async (text, limit) => {
       const escaped = escapeLike(text);
@@ -185,16 +251,27 @@ export function createGameDataStore(db: Database): GameDataStore {
             sql`${recipes.name} !~* ${unusedName}`,
           ),
         )
-        .orderBy(
-          sql`case when ${recipes.name} ilike ${`${escaped}%`} or ${items.name} ilike ${`${escaped}%`} then 0 else 1 end`,
-          sql`length(${recipes.name})`,
-          asc(recipes.name),
-        )
+        .orderBy(sql`${recipes.yellowAt} asc nulls last`, asc(recipes.name))
         .limit(limit);
       return found.map(({ yellowAt, greyAt, ...recipe }) => ({
         ...recipe,
         skillLevels: skillLevelsOf(yellowAt, greyAt),
       }));
+    },
+    classSpellsAt: async (classId, level) => {
+      const found = await db
+        .select()
+        .from(classSpells)
+        .where(and(eq(classSpells.classId, classId), eq(classSpells.level, level)))
+        .orderBy(asc(classSpells.name), asc(classSpells.rank));
+      return found.map((spell) => ({ ...spell, rank: spell.rank ?? undefined }));
+    },
+    nextClassSpellLevel: async (classId, afterLevel) => {
+      const [next] = await db
+        .select({ level: min(classSpells.level) })
+        .from(classSpells)
+        .where(and(eq(classSpells.classId, classId), gt(classSpells.level, afterLevel)));
+      return next?.level ?? undefined;
     },
   };
 }

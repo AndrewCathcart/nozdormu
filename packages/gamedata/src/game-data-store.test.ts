@@ -1,5 +1,6 @@
 import { useTestDatabase } from "@nozdormu/db/testing";
 import { describe, expect, it } from "vitest";
+import type { ClassSpell } from "./class-spells.ts";
 import type { ItemRecord } from "./item-sparse.ts";
 import type { RecipeRecord } from "./recipes.ts";
 import { createGameDataStore, type GameDataStore } from "./game-data-store.ts";
@@ -16,8 +17,23 @@ function importBuild(
   items: ItemRecord[],
   recipes: RecipeRecord[] = [],
   format = 2,
+  classSpells: ClassSpell[] = [],
 ): Promise<void> {
-  return store.replaceBuild({ version, format, items, recipes });
+  return store.replaceBuild({ version, format, items, recipes, classSpells });
+}
+
+// A made-up warrior (class 1) spell at Rank 1, learned by every race.
+// Imports a build with these class spells and nothing else.
+function importClassSpells(
+  store: GameDataStore,
+  classSpells: ClassSpell[],
+  version = "1.60.1.1101",
+): Promise<void> {
+  return importBuild(store, version, [], [], 4, classSpells);
+}
+
+function classSpell(spellId: number, name: string, level: number, classId = 1): ClassSpell {
+  return { spellId, classId, level, name, rank: 1, races: [] };
 }
 
 // A made-up recipe making item 1 from items 2 and 3.
@@ -48,6 +64,23 @@ describe("game data store", () => {
     );
 
     expect(await store.getRecipe(900_002)).toEqual(recipe(900_002, "Made-up Other Sword"));
+  });
+
+  it("finds the recipes that make any of some items, with their reagents", async () => {
+    const store = createGameDataStore(database.db);
+    const bar: RecipeRecord = {
+      ...recipe(900_003, "Smelt Made-up Bar"),
+      result: { kind: "item", itemId: 3, count: 1 },
+      reagents: [{ itemId: 6, count: 2 }],
+    };
+    await importBuild(
+      store,
+      "1.60.1.1101",
+      [item(1, "Made-up Sword")],
+      [recipe(900_001, "Made-up Sword"), bar],
+    );
+
+    expect(await store.recipesMaking([3, 2])).toEqual([bar]);
   });
 
   it("keeps an enchant, which makes no item", async () => {
@@ -98,41 +131,32 @@ describe("game data store", () => {
     ]);
   });
 
-  it("finds recipes whose name contains the text, names starting with it first, then shorter ones", async () => {
+  it("finds recipes whose name contains the text, lowest skill level first", async () => {
     const store = createGameDataStore(database.db);
+    const atSkill = (spellId: number, name: string, yellowAt: number): RecipeRecord => ({
+      ...recipe(spellId, name),
+      skillLevels: { yellowAt, greyAt: yellowAt + 50 },
+    });
     await importBuild(
       store,
       "1.60.1.1105",
       [item(1, "Made-up Anvil")],
       [
-        recipe(900_001, "Made-up Sword of Plenty"),
-        recipe(900_002, "Made-up Sword"),
-        recipe(900_003, "Sword-shaped Made-up Charm"),
-        recipe(900_004, "Made-up Helm"),
+        atSkill(900_001, "Made-up Sword of Plenty", 150),
+        { ...recipe(900_005, "Made-up Trainer Sword"), skillLevels: undefined },
+        atSkill(900_002, "Made-up Sword", 50),
+        atSkill(900_003, "Sword-shaped Made-up Charm", 100),
+        atSkill(900_004, "Made-up Helm", 10),
       ],
     );
 
     const found = await store.searchRecipes("sword", 25);
 
-    expect(found).toEqual([
-      {
-        spellId: 900_003,
-        name: "Sword-shaped Made-up Charm",
-        professions: ["Blacksmithing", "Leatherworking"],
-        skillLevels: { yellowAt: 50, greyAt: 100 },
-      },
-      {
-        spellId: 900_002,
-        name: "Made-up Sword",
-        professions: ["Blacksmithing", "Leatherworking"],
-        skillLevels: { yellowAt: 50, greyAt: 100 },
-      },
-      {
-        spellId: 900_001,
-        name: "Made-up Sword of Plenty",
-        professions: ["Blacksmithing", "Leatherworking"],
-        skillLevels: { yellowAt: 50, greyAt: 100 },
-      },
+    expect(found.map((summary) => summary.name)).toEqual([
+      "Made-up Sword",
+      "Sword-shaped Made-up Charm",
+      "Made-up Sword of Plenty",
+      "Made-up Trainer Sword",
     ]);
   });
 
@@ -321,5 +345,52 @@ describe("game data store", () => {
     const found = await store.searchItems("fishing line", 25);
 
     expect(found.map((match) => match.name)).toEqual(["Made-up High Test Fishing Line"]);
+  });
+
+  it("lists what a class learns at a level, by name, keeping ranks and races", async () => {
+    const store = createGameDataStore(database.db);
+    const starshards = {
+      ...classSpell(800_003, "Made-up Starshards", 10),
+      rank: undefined,
+      races: ["Night Elf"],
+    };
+    await importClassSpells(store, [
+      classSpell(800_001, "Made-up Strike", 10),
+      classSpell(800_002, "Made-up Shout", 12),
+      starshards,
+      classSpell(800_004, "Made-up Bolt", 10, 8),
+    ]);
+
+    expect(await store.classSpellsAt(1, 10)).toEqual([
+      starshards,
+      classSpell(800_001, "Made-up Strike", 10),
+    ]);
+  });
+
+  it("finds the next level at which a class learns something", async () => {
+    const store = createGameDataStore(database.db);
+    await importClassSpells(store, [
+      classSpell(800_001, "Made-up Strike", 10),
+      classSpell(800_002, "Made-up Shout", 14),
+      classSpell(800_004, "Made-up Bolt", 12, 8),
+    ]);
+
+    expect(await store.nextClassSpellLevel(1, 10)).toBe(14);
+  });
+
+  it("finds no next level after a class's last new spells", async () => {
+    const store = createGameDataStore(database.db);
+    await importClassSpells(store, [classSpell(800_002, "Made-up Shout", 14)]);
+
+    expect(await store.nextClassSpellLevel(1, 14)).toBeUndefined();
+  });
+
+  it("replaces the previous build's class spells", async () => {
+    const store = createGameDataStore(database.db);
+    await importClassSpells(store, [classSpell(800_001, "Made-up Strike", 10)]);
+
+    await importClassSpells(store, [classSpell(800_002, "Made-up Shout", 10)], "1.60.1.1102");
+
+    expect(await store.classSpellsAt(1, 10)).toEqual([classSpell(800_002, "Made-up Shout", 10)]);
   });
 });
