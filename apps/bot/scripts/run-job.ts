@@ -80,10 +80,13 @@ function dryRun(deps: FeatureDeps): FeatureDeps {
     dungeonStore: readOnlyDungeons(deps.dungeonStore),
     publish: (channelId, message, files = []) => {
       console.log(`\nDRY RUN: would post in channel ${channelId}:\n${message.content ?? ""}\n`);
-      for (const file of files) {
-        const path = join(tmpdir(), `nozdormu-dry-run-${file.fileName}`);
-        writeFileSync(path, file.data);
-        console.log(`DRY RUN: with ${file.fileName}, saved to ${path}\n`);
+      for (const { name, data } of files) {
+        const path = join(tmpdir(), `nozdormu-dry-run-${name}`);
+        writeFileSync(
+          path,
+          typeof data === "string" || data instanceof Uint8Array ? data : String(data),
+        );
+        console.log(`DRY RUN: with ${name}, saved to ${path}\n`);
       }
       return Promise.resolve();
     },

@@ -24,8 +24,9 @@ Format:
 - As short as the week allows: a quiet week might need 100 words, a busy one up to 500.
 
 The picture:
-- The catch-up is posted under a painted picture of the week. In "illustration", describe one scene for the painter in two to four sentences: the week's biggest moment or its overall mood, as it might look in a high-fantasy world.
+- The catch-up is posted under a painted picture of the week. In "scene", describe one scene for the painter in two to four sentences: the week's biggest moment or its overall mood, as it might look in a high-fantasy world.
 - Show members as fantasy figures by race and class, such as "a dwarf warrior" or "a gnome mage", never by name, and use plain fantasy words rather than the names of games, places, bosses or items.
+- The scene goes to a separate painting service, so don't quote anyone in it or repeat their words.
 - Nothing sensitive, no real people, nothing gory, and no writing in the picture.`;
 
 // The week's chat, wrapped so it's clearly separate from the request.

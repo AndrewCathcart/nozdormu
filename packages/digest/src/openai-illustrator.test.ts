@@ -33,12 +33,19 @@ function createDeps(reply: Response = json(200, drawn)) {
 }
 
 describe("createOpenAiIllustrator", () => {
-  it("asks OpenAI to paint the scene as a wide picture without writing, and returns it", async () => {
+  it("returns the picture OpenAI painted, as a JPEG file", async () => {
     const deps = createDeps();
 
     const illustration = await createOpenAiIllustrator(deps)(scene);
 
-    expect(illustration).toEqual({ data: new Uint8Array([1, 2, 3]), fileName: "this-week.jpg" });
+    expect(illustration).toEqual({ name: "this-week.jpg", data: new Uint8Array([1, 2, 3]) });
+  });
+
+  it("asks OpenAI to paint the scene as a wide picture without writing", async () => {
+    const deps = createDeps();
+
+    await createOpenAiIllustrator(deps)(scene);
+
     const [url, init] = deps.fetch.mock.calls[0] ?? [];
     expect(url).toBe("https://api.openai.com/v1/images/generations");
     expect(init?.method).toBe("POST");

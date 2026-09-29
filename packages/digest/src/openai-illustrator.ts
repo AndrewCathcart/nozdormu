@@ -51,7 +51,7 @@ export function createOpenAiIllustrator(deps: OpenAiIllustratorDeps): Illustrato
       throw new Error(`OpenAI answered HTTP ${String(response.status)}${code} instead of drawing.`);
     }
     const { data, usage } = drawing.parse(await response.json());
-    // Logged whatever the outcome, since every reply is paid for.
+    // Logged for every reply with a picture, since each is paid for.
     deps.logger.info(
       {
         event: "digest.illustration_drawn",
@@ -67,7 +67,7 @@ export function createOpenAiIllustrator(deps: OpenAiIllustratorDeps): Illustrato
     }
     return {
       data: new Uint8Array(Buffer.from(picture.b64_json, "base64")),
-      fileName: "this-week.jpg",
+      name: "this-week.jpg",
     };
   };
 }

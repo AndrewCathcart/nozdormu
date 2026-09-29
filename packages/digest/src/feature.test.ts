@@ -19,12 +19,12 @@ const someChat = [
 
 const aDigest = {
   sections: [{ heading: "Decided", body: "- Brannoc has made a spreadsheet." }],
-  illustration: "A dwarf warrior proudly unrolls an enormous spreadsheet across a tavern table.",
+  scene: "A dwarf warrior proudly unrolls an enormous spreadsheet across a tavern table.",
 } satisfies Digest;
 
 const aPicture = {
   data: new Uint8Array([1, 2, 3]),
-  fileName: "this-week.jpg",
+  name: "this-week.jpg",
 } satisfies Illustration;
 
 function createDeps(chat: ChatChannel[] = someChat, digest: Digest = aDigest) {
@@ -69,15 +69,29 @@ describe("createDigestFeature", () => {
     expect(deps.readChat).toHaveBeenCalledExactlyOnceWith([generalId, raidsId], lastWeek);
   });
 
-  it("posts the masthead with a picture of the scene Claude described, then the digest, pinging nobody", async () => {
+  it("has Claude write the digest from the week's chat", async () => {
     const deps = createDeps();
 
     await publishJob(deps).run();
 
     expect(deps.write).toHaveBeenCalledExactlyOnceWith(someChat, lastWeek);
+  });
+
+  it("has the scene Claude described painted", async () => {
+    const deps = createDeps();
+
+    await publishJob(deps).run();
+
     expect(deps.draw).toHaveBeenCalledExactlyOnceWith(
       "A dwarf warrior proudly unrolls an enormous spreadsheet across a tavern table.",
     );
+  });
+
+  it("posts the masthead with the picture, then the digest, pinging nobody", async () => {
+    const deps = createDeps();
+
+    await publishJob(deps).run();
+
     expect(deps.publish.mock.calls).toEqual([
       [
         postId,
@@ -107,10 +121,50 @@ describe("createDigestFeature", () => {
     ]);
   });
 
-  it("posts the digest without a picture when drawing it fails, and logs why", async () => {
+  it("posts the masthead again without the picture when Discord won't take the picture", async () => {
     const deps = createDeps();
-    const failure = new Error("OpenAI answered HTTP 400 (moderation_blocked) instead of drawing.");
-    deps.draw.mockRejectedValue(failure);
+    deps.publish.mockImplementation((_channelId, _message, files = []) =>
+      files.length > 0 ? Promise.reject(new Error("Missing Permissions")) : Promise.resolve(),
+    );
+
+    await publishJob(deps).run();
+
+    expect(
+      deps.publish.mock.calls.map(([, message, files]) => [message.nonce, files?.length]),
+    ).toEqual([
+      ["digest-2026-09-28-0", 1],
+      ["digest-2026-09-28-0", 0],
+      ["digest-2026-09-28-1", 0],
+    ]);
+  });
+
+  it("logs why Discord wouldn't take the picture", async () => {
+    const deps = createDeps();
+    const failure = new Error("Missing Permissions");
+    deps.publish.mockImplementation((_channelId, _message, files = []) =>
+      files.length > 0 ? Promise.reject(failure) : Promise.resolve(),
+    );
+
+    await publishJob(deps).run();
+
+    expect(deps.logger.error).toHaveBeenCalledExactlyOnceWith(
+      { event: "digest.picture_post_failed", err: failure },
+      "Discord wouldn't take this week's picture, so the digest goes without one",
+    );
+  });
+
+  it("posts the digest without a picture, asking OpenAI for nothing, when Claude describes no scene", async () => {
+    const deps = createDeps(someChat, { ...aDigest, scene: " " });
+
+    await publishJob(deps).run();
+
+    expect(deps.draw).not.toHaveBeenCalled();
+    expect(deps.publish.mock.calls.map(([, , files]) => files)).toEqual([[], []]);
+  });
+
+  it("posts the digest without a picture when painting it fails", async () => {
+    const deps = createDeps();
+    deps.draw.mockRejectedValue(new Error("OpenAI answered HTTP 500 instead of drawing."));
 
     await publishJob(deps).run();
 
@@ -118,6 +172,15 @@ describe("createDigestFeature", () => {
       ["# 📰 This week in the guild\n-# Monday 21 September to Monday 28 September 2026", []],
       ["## Decided\n- Brannoc has made a spreadsheet.", []],
     ]);
+  });
+
+  it("logs why the picture couldn't be painted", async () => {
+    const deps = createDeps();
+    const failure = new Error("OpenAI answered HTTP 400 (moderation_blocked) instead of drawing.");
+    deps.draw.mockRejectedValue(failure);
+
+    await publishJob(deps).run();
+
     expect(deps.logger.error).toHaveBeenCalledExactlyOnceWith(
       { event: "digest.illustration_failed", err: failure },
       "Couldn't draw this week's picture, so the digest goes without one",

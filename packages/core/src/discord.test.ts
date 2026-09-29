@@ -51,7 +51,7 @@ describe("createChannelPublisher", () => {
     const rest = { post: vi.fn<REST["post"]>().mockResolvedValue({}) } satisfies Pick<REST, "post">;
 
     await createChannelPublisher(rest)(channelId, { content: "Made-up masthead" }, [
-      { fileName: "this-week.jpg", data: new Uint8Array([1, 2, 3]) },
+      { name: "this-week.jpg", data: new Uint8Array([1, 2, 3]) },
     ]);
 
     expect(rest.post).toHaveBeenCalledExactlyOnceWith(Routes.channelMessages(channelId), {

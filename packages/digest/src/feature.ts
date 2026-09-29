@@ -1,4 +1,5 @@
 import {
+  type ChannelMessage,
   type ChannelPublisher,
   type Feature,
   latestWeeklyTime,
@@ -48,6 +49,9 @@ function latestWeek(now: Date): Week {
 export function createDigestFeature(deps: DigestFeatureDeps): Feature {
   // A digest without its picture is still worth posting.
   const drawPicture = async (scene: string): Promise<Illustration | undefined> => {
+    if (scene.trim() === "") {
+      return undefined;
+    }
     try {
       return await deps.draw(scene);
     } catch (error) {
@@ -56,6 +60,20 @@ export function createDigestFeature(deps: DigestFeatureDeps): Feature {
         "Couldn't draw this week's picture, so the digest goes without one",
       );
       return undefined;
+    }
+  };
+
+  // The masthead goes again without the picture if Discord won't take it (without Attach Files, say).
+  // It carries the same nonce, so if the first try did get through, Discord doesn't post it twice.
+  const postWithPicture = async (message: ChannelMessage, picture: Illustration): Promise<void> => {
+    try {
+      await deps.publish(deps.postChannelId, message, [picture]);
+    } catch (error) {
+      deps.logger.error(
+        { event: "digest.picture_post_failed", err: error },
+        "Discord wouldn't take this week's picture, so the digest goes without one",
+      );
+      await deps.publish(deps.postChannelId, message, []);
     }
   };
 
@@ -80,21 +98,22 @@ export function createDigestFeature(deps: DigestFeatureDeps): Feature {
     if (digest.sections.length === 0) {
       throw new Error("Claude wrote a digest with no sections.");
     }
-    const picture = await drawPicture(digest.illustration);
+    const picture = await drawPicture(digest.scene);
     const messages = renderDigest(week, digest);
     const postedOn = week.to.toISOString().slice(0, 10);
     for (const [index, content] of messages.entries()) {
-      await deps.publish(
-        deps.postChannelId,
-        {
-          content,
-          allowed_mentions: { parse: [] },
-          flags: MessageFlags.SuppressEmbeds,
-          nonce: `digest-${postedOn}-${String(index)}`,
-          enforce_nonce: true,
-        },
-        index === 0 && picture !== undefined ? [picture] : [],
-      );
+      const message = {
+        content,
+        allowed_mentions: { parse: [] },
+        flags: MessageFlags.SuppressEmbeds,
+        nonce: `digest-${postedOn}-${String(index)}`,
+        enforce_nonce: true,
+      } satisfies ChannelMessage;
+      if (index === 0 && picture !== undefined) {
+        await postWithPicture(message, picture);
+      } else {
+        await deps.publish(deps.postChannelId, message, []);
+      }
     }
     deps.logger.info(
       {
