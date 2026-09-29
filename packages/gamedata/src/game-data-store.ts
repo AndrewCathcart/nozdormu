@@ -9,7 +9,7 @@ import {
 import { and, asc, desc, eq, gt, ilike, inArray, min, or, sql } from "drizzle-orm";
 import type { ClassSpell } from "./class-spells.ts";
 import type { ItemRecord } from "./item-sparse.ts";
-import type { RecipeRecord, RecipeResult, SkillLevels } from "./recipes.ts";
+import type { Reagent, RecipeRecord, RecipeResult, SkillLevels } from "./recipes.ts";
 
 export interface ImportedBuild {
   readonly version: string;
@@ -38,6 +38,8 @@ export interface GameDataStore {
   // The names of those of these items that exist, by ID.
   readonly itemNames: (ids: readonly number[]) => Promise<Map<number, string>>;
   readonly getRecipe: (spellId: number) => Promise<RecipeRecord | undefined>;
+  // The recipes that make any of these items, in spell ID order.
+  readonly recipesMaking: (itemIds: readonly number[]) => Promise<RecipeRecord[]>;
   // Recipes whose name, or whose item's name, contains the text: names starting with it first,
   // then shorter names.
   readonly searchRecipes: (text: string, limit: number) => Promise<RecipeSummary[]>;
@@ -81,6 +83,18 @@ function resultOf(itemId: number | null, count: number | null): RecipeResult {
 // The recipes table keeps both skill levels null where the game data has none.
 function skillLevelsOf(yellowAt: number | null, greyAt: number | null): SkillLevels | undefined {
   return yellowAt === null || greyAt === null ? undefined : { yellowAt, greyAt };
+}
+
+function toRecipe(row: typeof recipes.$inferSelect, reagents: readonly Reagent[]): RecipeRecord {
+  return {
+    spellId: row.spellId,
+    name: row.name,
+    professions: row.professions,
+    result: resultOf(row.itemId, row.itemCount),
+    reagents,
+    skillLevels: skillLevelsOf(row.yellowAt, row.greyAt),
+    taughtBy: row.taughtBy,
+  };
 }
 
 export function createGameDataStore(db: Database): GameDataStore {
@@ -182,15 +196,42 @@ export function createGameDataStore(db: Database): GameDataStore {
         .from(recipeReagents)
         .where(eq(recipeReagents.spellId, spellId))
         .orderBy(asc(recipeReagents.position));
-      return {
-        spellId: found.spellId,
-        name: found.name,
-        professions: found.professions,
-        result: resultOf(found.itemId, found.itemCount),
-        reagents,
-        skillLevels: skillLevelsOf(found.yellowAt, found.greyAt),
-        taughtBy: found.taughtBy,
-      };
+      return toRecipe(found, reagents);
+    },
+    recipesMaking: async (itemIds) => {
+      if (itemIds.length === 0) {
+        return [];
+      }
+      const found = await db
+        .select()
+        .from(recipes)
+        .where(inArray(recipes.itemId, [...itemIds]))
+        .orderBy(asc(recipes.spellId));
+      if (found.length === 0) {
+        return [];
+      }
+      const reagents = await db
+        .select({
+          spellId: recipeReagents.spellId,
+          itemId: recipeReagents.itemId,
+          count: recipeReagents.count,
+        })
+        .from(recipeReagents)
+        .where(
+          inArray(
+            recipeReagents.spellId,
+            found.map((row) => row.spellId),
+          ),
+        )
+        .orderBy(asc(recipeReagents.position));
+      return found.map((row) =>
+        toRecipe(
+          row,
+          reagents
+            .filter((reagent) => reagent.spellId === row.spellId)
+            .map(({ itemId, count }) => ({ itemId, count })),
+        ),
+      );
     },
     searchRecipes: async (text, limit) => {
       const escaped = escapeLike(text);
