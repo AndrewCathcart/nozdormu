@@ -118,8 +118,6 @@ Tests are the minimum. Before calling a change done, run `pnpm check` and `pnpm 
 - GitHub Actions (`.github/workflows/ci.yml`) runs `pnpm check` on every PR and every push to `main`, in one job with the pnpm store cached. Actions are pinned to commit SHAs, and Renovate keeps them current.
 - A ruleset on `main` requires the `check` job to pass, and blocks force-pushes and deleting the branch. Every change reaches `main` through a PR.
 
-Planned:
-
-- On push to `main`, after CI passes, a deploy job runs `railway up` with a Railway project token, in a `production` environment with a concurrency group. Don't rely on Railway's "Wait for CI" setting instead.
-- Railway service settings live in `railway.toml`, which overrides the dashboard.
-- Railway stops the old deployment with SIGTERM, then SIGKILL. Start the bot with `node` directly, not through `pnpm`, so the signal reaches it. Set `drainingSeconds` to about 20, so shutdown can finish: the scheduler waits up to 10 seconds for running jobs, then Discord and the database close. Railway's docs don't state the default, and one report says it's 0.
+- The `image` job builds the `Dockerfile` (the image Railway runs: Node 26, production dependencies only, no build step, Node as PID 1) and applies the migrations from inside it against a Postgres service, twice.
+- On push to `main`, once `check` and `image` pass, the `deploy` job runs `railway up --ci --service nozdormu` with the `RAILWAY_TOKEN` project token, in the `production` environment with a concurrency group. Don't rely on Railway's "Wait for CI" setting instead.
+- Railway service settings live in `railway.toml`, which overrides the dashboard: the Dockerfile builder, `node apps/bot/src/migrate.ts` as the pre-deploy command (a failure stops the deploy), and `drainingSeconds = 20` so shutdown can finish (the scheduler waits up to 10 seconds for running jobs, then Discord and the database close). There's no `startCommand`: the Dockerfile's exec-form CMD keeps Node as PID 1, so SIGTERM reaches it.

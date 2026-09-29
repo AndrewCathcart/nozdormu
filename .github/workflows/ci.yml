@@ -39,3 +39,57 @@ jobs:
           cache: true
           require-lockfile: true
       - run: pnpm check
+
+  # Builds the image Railway runs, then applies the migrations from inside it against Postgres,
+  # to prove the image can run the bot's TypeScript and reach the database.
+  image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:18.4
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: docker build --tag nozdormu .
+      - name: Apply the migrations from inside the image, twice
+        # Made-up settings in the right format: the migrate script checks every setting.
+        run: |
+          settings="-e DISCORD_TOKEN=made-up-token
+            -e DISCORD_APPLICATION_ID=100000000000000001
+            -e DISCORD_GUILD_ID=200000000000000002
+            -e YOUTUBE_ALERT_CHANNEL_ID=300000000000000003
+            -e DATABASE_URL=postgres://postgres@localhost:5433/postgres"
+          docker run --rm --network host $settings nozdormu node apps/bot/src/migrate.ts | tee first.log
+          grep -q '"event":"migrations.applied"' first.log
+          docker run --rm --network host $settings nozdormu node apps/bot/src/migrate.ts | tee second.log
+          grep -q '"applied":0' second.log
+
+  # Deploys main to Railway once both jobs pass. Railway runs the migrations as its pre-deploy
+  # command (see railway.toml).
+  deploy:
+    needs: [check, image]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: npx --yes @railway/cli@5.62.1 up --ci --service nozdormu
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
