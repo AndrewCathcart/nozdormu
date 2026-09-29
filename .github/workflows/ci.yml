@@ -83,7 +83,8 @@ jobs:
         run: railway --version
 
   # Deploys main to Railway once both jobs pass. Railway runs the migrations as its pre-deploy
-  # command (see railway.toml).
+  # command (a service setting; see CLAUDE.md). `railway up --ci` exits once the build is done, so
+  # a green job doesn't mean the bot started: check the deployment on Railway.
   deploy:
     needs: [check, image]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
