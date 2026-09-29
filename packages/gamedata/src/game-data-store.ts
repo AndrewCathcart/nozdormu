@@ -40,8 +40,8 @@ export interface GameDataStore {
   readonly getRecipe: (spellId: number) => Promise<RecipeRecord | undefined>;
   // The recipes that make any of these items, in spell ID order.
   readonly recipesMaking: (itemIds: readonly number[]) => Promise<RecipeRecord[]>;
-  // Recipes whose name, or whose item's name, contains the text: names starting with it first,
-  // then shorter names.
+  // Recipes whose name, or whose item's name, contains the text: lowest skill level first (where
+  // they turn yellow), so they come in the order you can make them.
   readonly searchRecipes: (text: string, limit: number) => Promise<RecipeSummary[]>;
   // What a class learns from its trainer at a level, by name.
   readonly classSpellsAt: (classId: number, level: number) => Promise<ClassSpell[]>;
@@ -251,11 +251,7 @@ export function createGameDataStore(db: Database): GameDataStore {
             sql`${recipes.name} !~* ${unusedName}`,
           ),
         )
-        .orderBy(
-          sql`case when ${recipes.name} ilike ${`${escaped}%`} or ${items.name} ilike ${`${escaped}%`} then 0 else 1 end`,
-          sql`length(${recipes.name})`,
-          asc(recipes.name),
-        )
+        .orderBy(sql`${recipes.yellowAt} asc nulls last`, asc(recipes.name))
         .limit(limit);
       return found.map(({ yellowAt, greyAt, ...recipe }) => ({
         ...recipe,
