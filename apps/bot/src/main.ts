@@ -8,7 +8,7 @@ import {
 } from "@nozdormu/core";
 import { createCommandRegistrationStore, createJobRunStore } from "@nozdormu/db";
 import { Client, Events, GatewayIntentBits, REST } from "discord.js";
-import { createFeatures } from "./features.ts";
+import { createFeatureDeps, createFeatures, scheduledJobs } from "./features.ts";
 import { connectDatabaseOrExit, exitOnDiscordRejection, loadConfigOrExit } from "./startup.ts";
 
 const logger = createLogger();
@@ -18,16 +18,17 @@ async function main(): Promise<void> {
   const { discord } = config;
   const database = await connectDatabaseOrExit(config.database.url, logger);
 
-  const features = createFeatures();
-  const registry = createRegistry(features, logger);
   const rest = new REST().setToken(discord.token);
+  const features = createFeatures(createFeatureDeps(config, database.db, rest, logger));
+  const registry = createRegistry(features, logger);
   const client = new Client({ intents: [GatewayIntentBits.Guilds] });
   // Started before anything touches Discord, so bad job definitions fail first. Jobs talk to
   // Discord over REST, so they don't need the gateway.
-  const scheduler = startScheduler(
-    features.flatMap((feature) => feature.jobs ?? []),
-    { store: createJobRunStore(database.db), logger, stopTimeoutMs: 10_000 },
-  );
+  const scheduler = startScheduler(scheduledJobs(features), {
+    store: createJobRunStore(database.db),
+    logger,
+    stopTimeoutMs: 10_000,
+  });
 
   const shutDown = async (): Promise<void> => {
     await scheduler.stop();

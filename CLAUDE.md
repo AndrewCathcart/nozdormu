@@ -45,11 +45,13 @@ Prefer the latest versions that work together, and fast tools. The choices below
 
 Built so far:
 
-- `apps/bot` is the process. `src/main.ts` loads config (`loadConfig` validates the environment and names bad settings without echoing values), connects to Postgres, builds the registry from `createFeatures()`, registers commands if they changed since the last start, connects to the gateway, and disconnects cleanly on SIGINT or SIGTERM. `src/migrate.ts` applies pending migrations; Railway will run it before each deploy. Both use `src/startup.ts`, which exits with a message naming the setting when config is invalid, Postgres refuses the connection, or Discord rejects a setting during registration or login. `src/startup-failures.ts` turns Discord's and Postgres's rejections into those messages.
+- `apps/bot` is the process. `src/main.ts` loads config (`loadConfig` validates the environment and names bad settings without echoing values), connects to Postgres, builds the features with `createFeatures(createFeatureDeps(...))` (`src/features.ts` lists every feature and builds the real outside-world dependencies they get; `pnpm job --dry-run` swaps some for printing versions), builds the registry, registers commands if they changed since the last start, connects to the gateway, and disconnects cleanly on SIGINT or SIGTERM. `src/migrate.ts` applies pending migrations; Railway will run it before each deploy. Both use `src/startup.ts`, which exits with a message naming the setting when config is invalid, Postgres refuses the connection, or Discord rejects a setting during registration or login. `src/startup-failures.ts` turns Discord's and Postgres's rejections into those messages.
 - `packages/core` holds the feature registry (`createRegistry`), the Discord adapter (`registerGuildCommands`, `routeInteractions`), `registerCommandsIfChanged`, `createLogger` and `serializeError`. The registry refuses duplicate command names and dispatches each command to its handler. Every dispatch result carries the reply to send: an unknown command or a handler that throws gets a private error reply and a log entry, never a crash. The adapter sends that reply through Discord's interaction callback. Keep the core thin.
-- `packages/db` holds the Drizzle schema (`src/schema.ts`), the committed migrations (`migrations/`), `connectDatabase` (which runs `select 1`, so a bad URL fails straight away), `runMigrations` (which returns how many it applied), and the Postgres stores, such as `createCommandRegistrationStore`. `@nozdormu/db/testing` gives each test file its own database.
+- `packages/db` holds the Drizzle schema (`src/schema.ts`), the committed migrations (`migrations/`), `connectDatabase` (which runs `select 1`, so a bad URL fails straight away), `runMigrations` (which returns how many it applied), and the Postgres stores the core needs (`createCommandRegistrationStore`, `createJobRunStore`). A feature's own store lives in the feature package. `@nozdormu/db/testing` gives each test file its own database.
 - `packages/core` also holds the scheduler (`startScheduler`). A `Feature` declares its `commands` and scheduled `jobs`, leaving out what it doesn't use. The bot starts the scheduler before it registers commands or logs in (jobs use Discord's REST API, not the gateway), and on shutdown stops it first, then Discord, then the database.
 - `packages/ping` is the `/ping` feature.
+- `packages/youtube` is the YouTube alert: `parseFeed`, a feed reader that retries YouTube's frequent short outages (bad status, timeout, network error or unreadable feed, 3 attempts 3 s apart), the `youtube.poll` job (every 10 minutes), and the Postgres `SeenVideoStore`. Its first check records the channel's existing videos (and that the check happened, even with an empty feed) without posting. After that, each unseen video newer than the newest one recorded is posted oldest first, and recorded only once its post succeeds, so a failed post is retried at the next check without holding up the others. Unseen videos no newer than that (older ones resurfacing after a deletion) are recorded without posting. Before posting, the bot reads its own last 50 messages in the alert channel and skips any video already linked there, which covers a crash between posting and recording. Each post carries the nonce `yt-<video id>` with `enforce_nonce`, so Discord drops a repeat sent within a few minutes. Posts never ping anyone (`allowed_mentions: { parse: [] }`).
+- All tables live in `packages/db/src/schema.ts`, so drizzle-kit sees one schema. A feature's store lives in the feature package and imports its table from `@nozdormu/db`.
 - Each feature package exports a factory, such as `createPingFeature()`, that takes the feature's injected dependencies (for example the Discord REST client, the database, the Claude client, a clock) and returns a `Feature`. Command handlers take a parsed `CommandInvocation` and return a `Promise<CommandReply>`. That's the main testing seam.
 - Internal packages are source-only: `exports` points at `src/*.ts`, and dependents use `workspace:*`. Shared dependency versions live in the `catalog` in `pnpm-workspace.yaml`.
 
@@ -89,6 +91,7 @@ Planned:
 
 - `pnpm check` runs everything CI runs: format check, lint, typecheck and tests.
 - `pnpm dev` runs the bot against the Dev app and restarts it on changes. `pnpm start` runs it once.
+- `pnpm job <job-name>` runs one scheduled job once, outside the scheduler, for real, including posting to Discord. `pnpm job <job-name> --dry-run` uses the real feed and database but prints what it would post or record, and changes nothing.
 - `pnpm smoke` starts the bot, waits for its ready log line, checks through Discord's API that Discord has exactly the commands the bot logged as its own, then stops it.
 - `pnpm fmt` formats every file. `pnpm lint`, `pnpm typecheck` and `pnpm test` run one step each.
 - `pnpm test <path>` runs a single test file. Tests need the DBngin "nozdormu" server running.
@@ -105,9 +108,7 @@ Tests are the minimum. Before calling a change done, run `pnpm check` and `pnpm 
 
 - After adding a migration, run `pnpm db:migrate` twice against `nozdormu_dev`: the second run must do nothing.
 
-Planned, as the bot is built:
-
-- Scheduled jobs have a dry-run mode that uses the real external source and prints what it would post instead of posting it.
+- Check a scheduled job with `pnpm job <job-name> --dry-run` against the real source before running it for real. A dry run prints the posts it would make to the terminal, never into the logs. Its posts go to the channels in `.env`, which point at Nozdormu Test.
 
 ## CI and deploy
 

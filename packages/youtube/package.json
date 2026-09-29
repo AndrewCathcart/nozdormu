@@ -1,5 +1,5 @@
 {
-  "name": "@nozdormu/core",
+  "name": "@nozdormu/youtube",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -7,12 +7,11 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
+    "@nozdormu/core": "workspace:*",
+    "@nozdormu/db": "workspace:*",
     "discord-api-types": "catalog:",
-    "discord.js": "catalog:",
-    "pino": "catalog:",
+    "drizzle-orm": "catalog:",
+    "fast-xml-parser": "catalog:",
     "zod": "catalog:"
-  },
-  "devDependencies": {
-    "drizzle-orm": "catalog:"
   }
 }
