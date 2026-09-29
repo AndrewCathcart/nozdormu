@@ -24,10 +24,10 @@ const drawing = z.object({
   usage: z.object({ input_tokens: z.int(), output_tokens: z.int() }),
 });
 
-const model = "gpt-image-2.5-flare";
+const model = "gpt-image-2.5-sunburst";
 
-// Draws each digest's picture with OpenAI's gpt-image-2.5-flare: at medium quality, 1536 × 1024
-// takes about 15 seconds and costs about $0.01.
+// Draws each digest's picture with OpenAI's gpt-image-2.5-sunburst, the more detailed of its two
+// newest models: at high quality, 1536 × 1024 takes about 40 seconds and costs about $0.04.
 export function createOpenAiIllustrator(deps: OpenAiIllustratorDeps): Illustrator {
   return async (scene) => {
     const response = await deps.fetch("https://api.openai.com/v1/images/generations", {
@@ -37,7 +37,7 @@ export function createOpenAiIllustrator(deps: OpenAiIllustratorDeps): Illustrato
         model,
         prompt: paintingPrompt(scene),
         size: "1536x1024",
-        quality: "medium",
+        quality: "high",
         output_format: "jpeg",
         output_compression: 85,
         n: 1,

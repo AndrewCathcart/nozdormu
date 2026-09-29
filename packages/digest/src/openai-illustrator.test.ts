@@ -54,11 +54,11 @@ describe("createOpenAiIllustrator", () => {
       "content-type": "application/json",
     });
     expect(typeof init?.body === "string" ? JSON.parse(init.body) : undefined).toEqual({
-      model: "gpt-image-2.5-flare",
+      model: "gpt-image-2.5-sunburst",
       prompt:
         "A single-panel newspaper cartoon about a fantasy adventuring guild: clean, confident ink lines, flat muted colours, expressive comic faces and poses, and a simple, uncluttered background, in the tradition of classic magazine cartoons. The scene: A dwarf warrior and a gnome mage cheer over a map in a crowded tavern. No text, letters, speech bubbles, numbers, logos or watermarks anywhere.",
       size: "1536x1024",
-      quality: "medium",
+      quality: "high",
       output_format: "jpeg",
       output_compression: 85,
       n: 1,
@@ -73,7 +73,7 @@ describe("createOpenAiIllustrator", () => {
     expect(deps.logger.info).toHaveBeenCalledExactlyOnceWith(
       {
         event: "digest.illustration_drawn",
-        model: "gpt-image-2.5-flare",
+        model: "gpt-image-2.5-sunburst",
         inputTokens: 109,
         outputTokens: 343,
       },
