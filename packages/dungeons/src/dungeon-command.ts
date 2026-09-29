@@ -45,7 +45,7 @@ function dungeonCard(dungeon: StoredDungeon, maxLootShown: number): APIEmbed {
       value: lootLines(boss.loot, maxLootShown),
     })),
     footer: {
-      text: `Bosses and loot from Spyglass's scans, as of build ${dungeon.build}. Loot may be incomplete, and has no drop chances.`,
+      text: "Loot may be incomplete, and has no drop chances.",
     },
   };
 }

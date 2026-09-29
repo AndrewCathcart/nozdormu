@@ -44,7 +44,6 @@ describe("/item", () => {
         "**Made-up Sword of Testing**",
         "Rare One-Hand · item level 42 · requires level 37",
         "https://www.wowhead.com/forever/item=270001",
-        "-# Item data from wago.tools",
       ].join("\n"),
       allowed_mentions: { parse: [] },
     });

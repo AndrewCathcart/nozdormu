@@ -114,7 +114,7 @@ describe("/mats", () => {
         "- 7 × Made-up Bar",
         "- 2 × Made-up Tube",
         "https://www.wowhead.com/forever/item=280001",
-        "-# Recipe data from wago.tools. Transmutes and leather grade-ups aren't broken down.",
+        "-# Transmutes and leather grade-ups aren't broken down.",
       ].join("\n"),
       allowed_mentions: { parse: [] },
     });
@@ -238,7 +238,7 @@ describe("/mats", () => {
       "You'll need:",
       "- 4 × Made-up Gem",
       "https://www.wowhead.com/forever/spell=910009",
-      "-# Recipe data from wago.tools. Transmutes and leather grade-ups aren't broken down.",
+      "-# Transmutes and leather grade-ups aren't broken down.",
     ]);
   });
 
