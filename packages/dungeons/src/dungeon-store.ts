@@ -9,7 +9,14 @@ import {
   scannedItemStats,
 } from "@nozdormu/db";
 import { asc, eq, inArray } from "drizzle-orm";
-import type { Dungeon, Faction, LootItem, Quest, ScannedItem, SpyglassData } from "./spyglass.ts";
+import {
+  type Dungeon,
+  faction,
+  type LootItem,
+  type Quest,
+  type ScannedItem,
+  type SpyglassData,
+} from "./spyglass.ts";
 
 // A loot item, with its scanned details where Spyglass has scanned it.
 export interface StoredLootItem extends LootItem {
@@ -25,12 +32,6 @@ export interface StoredDungeon extends Omit<Dungeon, "bosses" | "quests"> {
   readonly quests: readonly StoredQuest[];
 }
 
-const factions: ReadonlySet<string> = new Set(["Alliance", "Horde", "Both"] satisfies Faction[]);
-
-function isFaction(side: string): side is Faction {
-  return factions.has(side);
-}
-
 export type DungeonSummary = Pick<Dungeon, "name" | "minLevel" | "maxLevel">;
 
 export interface DungeonStore {
@@ -43,7 +44,7 @@ export interface DungeonStore {
   readonly loadedBuild: () => Promise<string | undefined>;
 }
 
-// Postgres allows 65,535 parameters per statement; at most six per row keeps this well under.
+// Postgres allows 65,535 parameters per statement; at most nine per row keeps this well under.
 const insertBatchSize = 1000;
 
 async function insertInBatches<Row>(
@@ -232,7 +233,7 @@ export function createDungeonStore(db: Database): DungeonStore {
         quests: quests.map((quest) => ({
           id: quest.questId,
           name: quest.name,
-          side: quest.side !== null && isFaction(quest.side) ? quest.side : undefined,
+          side: faction.safeParse(quest.side).data,
           className: quest.className ?? undefined,
           requiredLevel: quest.requiredLevel ?? undefined,
           xp: quest.xp ?? undefined,

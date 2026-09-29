@@ -17,12 +17,15 @@ export type DispatchResult =
   | { readonly kind: "unknown-command"; readonly commandName: string; readonly reply: CommandReply }
   | { readonly kind: "failed"; readonly commandName: string; readonly reply: CommandReply };
 
-export interface PressResult {
-  readonly kind: "handled" | "unknown-button" | "failed";
-  // The name at the start of the button's custom ID.
-  readonly commandName: string;
-  readonly response: ButtonResponse;
-}
+// What happened to a button press. The command name is the one at the start of the button's
+// custom ID. A press no command answers, or one that fails, always gets a new (private) reply.
+export type PressResult =
+  | { readonly kind: "handled"; readonly commandName: string; readonly response: ButtonResponse }
+  | {
+      readonly kind: "unknown-button" | "failed";
+      readonly commandName: string;
+      readonly response: { readonly kind: "reply"; readonly message: CommandReply };
+    };
 
 export interface Registry {
   readonly commandDefinitions: readonly CommandDefinition[];
@@ -37,10 +40,10 @@ const unknownCommandReply: CommandReply = {
   flags: MessageFlags.Ephemeral,
 };
 
-const unknownButtonResponse: ButtonResponse = {
+const unknownButtonResponse = {
   kind: "reply",
   message: { content: "That button doesn't work any more.", flags: MessageFlags.Ephemeral },
-};
+} as const satisfies ButtonResponse;
 
 const failedReply: CommandReply = {
   content: "Something went wrong. It's been logged.",

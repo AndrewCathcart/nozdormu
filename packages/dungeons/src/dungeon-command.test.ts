@@ -180,6 +180,7 @@ describe("/dungeon", () => {
           },
         },
       ],
+      components: [],
       allowed_mentions: { parse: [] },
     });
   });
@@ -454,30 +455,52 @@ describe("/dungeon", () => {
   });
 });
 
-// The buttons under a card, with the given one greyed out as the card showing.
-function switchButtons(showing: "loot" | "quests", questCount: number) {
-  return [
-    {
-      type: 1,
-      components: [
-        {
-          type: 2,
-          style: showing === "loot" ? 1 : 2,
-          label: "Bosses & loot",
-          custom_id: "dungeon:loot:The Made-up Hollow",
-          disabled: showing === "loot",
-        },
-        {
-          type: 2,
-          style: showing === "quests" ? 1 : 2,
-          label: `Quests (${String(questCount)})`,
-          custom_id: "dungeon:quests:The Made-up Hollow",
-          disabled: showing === "quests",
-        },
-      ],
-    },
-  ];
-}
+// The buttons under the loot card of the made-up dungeon with two quests: "Bosses & loot" greyed
+// out and highlighted, as the card showing.
+const buttonsShowingLoot = [
+  {
+    type: 1,
+    components: [
+      {
+        type: 2,
+        style: 1,
+        label: "Bosses & loot",
+        custom_id: "dungeon:loot:The Made-up Hollow",
+        disabled: true,
+      },
+      {
+        type: 2,
+        style: 2,
+        label: "Quests (2)",
+        custom_id: "dungeon:quests:The Made-up Hollow",
+        disabled: false,
+      },
+    ],
+  },
+];
+
+// The same buttons under its quests card, with "Quests (2)" greyed out and highlighted instead.
+const buttonsShowingQuests = [
+  {
+    type: 1,
+    components: [
+      {
+        type: 2,
+        style: 2,
+        label: "Bosses & loot",
+        custom_id: "dungeon:loot:The Made-up Hollow",
+        disabled: false,
+      },
+      {
+        type: 2,
+        style: 1,
+        label: "Quests (2)",
+        custom_id: "dungeon:quests:The Made-up Hollow",
+        disabled: true,
+      },
+    ],
+  },
+];
 
 describe("/dungeon's quests", () => {
   it("shows the dungeon's quests, lowest level first, when Quests is pressed", async () => {
@@ -511,7 +534,7 @@ describe("/dungeon's quests", () => {
             footer: { text: "Quests and their details may be incomplete." },
           },
         ],
-        components: switchButtons("quests", 2),
+        components: buttonsShowingQuests,
         allowed_mentions: { parse: [] },
       },
     });
@@ -522,7 +545,7 @@ describe("/dungeon's quests", () => {
 
     const reply = await command.handle(invoke("The Made-up Hollow"));
 
-    expect(reply.components).toEqual(switchButtons("loot", 2));
+    expect(reply.components).toEqual(buttonsShowingLoot);
   });
 
   it("switches back to the bosses and loot when that's pressed", async () => {
@@ -530,13 +553,12 @@ describe("/dungeon's quests", () => {
 
     const response = await command.press?.({ customId: "dungeon:loot:The Made-up Hollow" });
 
-    expect(response).toEqual({
-      kind: "update",
-      message: {
-        ...(await command.handle(invoke("The Made-up Hollow"))),
-        components: switchButtons("loot", 2),
-      },
-    });
+    expect(response?.kind).toBe("update");
+    expect(response?.message.embeds?.[0]?.fields?.map((field) => field.name)).toEqual([
+      "Made-up Warden",
+      "Made-up Tyrant",
+    ]);
+    expect(response?.message.components).toEqual(buttonsShowingLoot);
   });
 
   it("replies privately when the dungeon is no longer stored", async () => {
@@ -584,5 +606,82 @@ describe("/dungeon's quests", () => {
       "[Made-up Reward 1](https://www.wowhead.com/forever/item=282000)",
       "and 5 more",
     ]);
+  });
+
+  it("clears the buttons when a resync has left the dungeon no quests", async () => {
+    const command = createDungeonCommand(createFakeStore([hollow]));
+
+    const response = await command.press?.({ customId: "dungeon:loot:The Made-up Hollow" });
+
+    expect(response?.message.components).toEqual([]);
+  });
+
+  it("names only the class of a class quest both factions can take", async () => {
+    const [errand] = hollowWithQuests.quests.filter((quest) => quest.id === 90_101);
+    const bothFactions: StoredDungeon = {
+      ...hollow,
+      quests: errand === undefined ? [] : [{ ...errand, side: "Both" }],
+    };
+    const command = createDungeonCommand(createFakeStore([bothFactions]));
+
+    const response = await command.press?.({ customId: "dungeon:quests:The Made-up Hollow" });
+
+    expect(response?.message.embeds?.[0]?.fields?.[0]?.value.split("\n")[0]).toBe(
+      "Warlocks only · from level 12 · 1,450 XP · [Wowhead](https://www.wowhead.com/forever/quest=90101)",
+    );
+  });
+
+  it("shows fewer quests, saying how many more, when even without rewards they won't all fit", async () => {
+    // 25 quests, each with a 400-letter objective. A quest's section takes its name (15 characters
+    // for Made-up Quest 1 to 9, 16 after) and 500 more: 97 for the facts line, a line break and 402
+    // for the objective. With the title (18), levels (34) and a 70-character footer, 11 quests take
+    // 5,789 characters and 12 take 6,205, over Discord's 6,000.
+    const long: StoredDungeon = {
+      ...hollow,
+      quests: Array.from({ length: 25 }, (_quest, quest) => ({
+        id: 91_000 + quest,
+        name: `Made-up Quest ${String(quest + 1)}`,
+        side: "Both",
+        className: undefined,
+        requiredLevel: 13,
+        xp: 1000,
+        objective: "a".repeat(400),
+        rewards: [],
+      })),
+    };
+    const command = createDungeonCommand(createFakeStore([long]));
+
+    const response = await command.press?.({ customId: "dungeon:quests:The Made-up Hollow" });
+
+    const [questsCard] = response?.message.embeds ?? [];
+    expect(questsCard?.fields?.length).toBe(11);
+    expect(questsCard?.footer?.text).toBe(
+      "Quests and their details may be incomplete. 14 more quests didn't fit.",
+    );
+  });
+
+  it("shows at most 25 quests, Discord's limit on sections, saying how many more", async () => {
+    const many: StoredDungeon = {
+      ...hollow,
+      quests: Array.from({ length: 30 }, (_quest, quest) => ({
+        id: 92_000 + quest,
+        name: `Made-up Quest ${String(quest + 1)}`,
+        side: undefined,
+        className: undefined,
+        requiredLevel: undefined,
+        xp: undefined,
+        objective: undefined,
+        rewards: [],
+      })),
+    };
+    const command = createDungeonCommand(createFakeStore([many]));
+
+    const response = await command.press?.({ customId: "dungeon:quests:The Made-up Hollow" });
+
+    const [questsCard] = response?.message.embeds ?? [];
+    expect(questsCard?.fields?.length).toBe(25);
+    expect(questsCard?.footer?.text).toBe(
+      "Quests and their details may be incomplete. 5 more quests didn't fit.",
+    );
   });
 });

@@ -11,7 +11,8 @@ export interface Boss {
   readonly loot: readonly LootItem[];
 }
 
-export type Faction = "Alliance" | "Horde" | "Both";
+export const faction = z.enum(["Alliance", "Horde", "Both"]);
+export type Faction = z.infer<typeof faction>;
 
 // A quest for the dungeon. Spyglass hasn't scanned every detail of every quest, so only its ID and
 // name are certain.
@@ -85,6 +86,22 @@ const listing = z.object({ files: z.array(z.object({ name: z.string() })) });
 const dungeonFilePath = /^\/\.contribute\/data\/(dungeons\/[a-z0-9_]+\.json)$/;
 const itemFilePath = /^\/\.contribute\/data\/(items\/items_\d+\.json)$/;
 
+// A quest as Spyglass lists it. Only the ID and name are needed; a detail that isn't what's
+// expected is left out rather than failing the quest.
+const questEntry = z.object({
+  id: z.int().positive(),
+  name: z.string(),
+  side: faction.optional().catch(undefined),
+  class: z.string().optional().catch(undefined),
+  requiredLevel: z.int().optional().catch(undefined),
+  xp: z.int().optional().catch(undefined),
+  objective: z.string().optional().catch(undefined),
+  items: z
+    .array(z.object({ item: z.int().positive(), name: z.string() }))
+    .optional()
+    .catch(undefined),
+});
+
 const dungeonFile = z.object({
   name: z.string(),
   minLevel: z.int().optional(),
@@ -96,20 +113,8 @@ const dungeonFile = z.object({
       loot: z.array(z.object({ item: z.int().positive(), name: z.string() })),
     }),
   ),
-  quests: z
-    .array(
-      z.object({
-        id: z.int().positive(),
-        name: z.string(),
-        side: z.enum(["Alliance", "Horde", "Both"]).optional(),
-        class: z.string().optional(),
-        requiredLevel: z.int().optional(),
-        xp: z.int().optional(),
-        objective: z.string().optional(),
-        items: z.array(z.object({ item: z.int().positive(), name: z.string() })).optional(),
-      }),
-    )
-    .optional(),
+  // Each quest is read on its own (`questEntry`), so one odd quest doesn't fail the sync.
+  quests: z.array(z.unknown()).optional(),
 });
 
 // Items by ID. An item without an English name is left out.
@@ -166,16 +171,21 @@ export function createSpyglassReader(options: SpyglassReaderOptions): SpyglassRe
           name: encounter.name,
           loot: encounter.loot.map((item) => ({ itemId: item.item, name: item.name })),
         })),
-        quests: (dungeon.quests ?? []).map((quest) => ({
-          id: quest.id,
-          name: quest.name,
-          side: quest.side,
-          className: quest.class,
-          requiredLevel: quest.requiredLevel,
-          xp: quest.xp,
-          objective: quest.objective,
-          rewards: (quest.items ?? []).map((item) => ({ itemId: item.item, name: item.name })),
-        })),
+        quests: (dungeon.quests ?? [])
+          .flatMap((entry) => {
+            const parsed = questEntry.safeParse(entry);
+            return parsed.success ? [parsed.data] : [];
+          })
+          .map((quest) => ({
+            id: quest.id,
+            name: quest.name,
+            side: quest.side,
+            className: quest.class,
+            requiredLevel: quest.requiredLevel,
+            xp: quest.xp,
+            objective: quest.objective,
+            rewards: (quest.items ?? []).map((item) => ({ itemId: item.item, name: item.name })),
+          })),
       });
     }
 

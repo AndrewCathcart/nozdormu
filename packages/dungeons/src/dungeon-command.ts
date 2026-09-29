@@ -84,7 +84,10 @@ const factionNames: Readonly<Record<Faction, string>> = {
 // whatever hasn't been scanned.
 function questLines(quest: StoredQuest, maxRewardsShown: number): string {
   const facts = [
-    quest.side === undefined ? undefined : factionNames[quest.side],
+    // A class quest both factions can take just names the class.
+    quest.side === undefined || (quest.side === "Both" && quest.className !== undefined)
+      ? undefined
+      : factionNames[quest.side],
     quest.className === undefined ? undefined : `${quest.className}s only`,
     quest.requiredLevel === undefined ? undefined : `from level ${String(quest.requiredLevel)}`,
     quest.xp === undefined ? undefined : `${quest.xp.toLocaleString("en-GB")} XP`,
@@ -99,21 +102,39 @@ function questLines(quest: StoredQuest, maxRewardsShown: number): string {
 
 // The card showing a dungeon's quests, lowest level first, a section each. Quests whose level
 // isn't known come last.
-function questsCard(dungeon: StoredDungeon, maxRewardsShown: number): APIEmbed {
-  const quests = dungeon.quests.toSorted(
-    (a, b) =>
-      (a.requiredLevel ?? Number.POSITIVE_INFINITY) - (b.requiredLevel ?? Number.POSITIVE_INFINITY),
-  );
+function questsCard(
+  dungeon: StoredDungeon,
+  maxRewardsShown: number,
+  maxQuestsShown: number,
+): APIEmbed {
+  const quests = dungeon.quests
+    .toSorted(
+      (a, b) =>
+        (a.requiredLevel ?? Number.POSITIVE_INFINITY) -
+        (b.requiredLevel ?? Number.POSITIVE_INFINITY),
+    )
+    .slice(0, Math.min(maxQuestsShown, maxFields));
+  const more = dungeon.quests.length - quests.length;
   return {
     ...heading(dungeon),
-    fields: quests.slice(0, maxFields).map((quest) => ({
+    fields: quests.map((quest) => ({
       name: quest.name,
       value: questLines(quest, maxRewardsShown),
     })),
     footer: {
-      text: "Quests and their details may be incomplete.",
+      text: `Quests and their details may be incomplete.${more > 0 ? ` ${String(more)} more quests didn't fit.` : ""}`,
     },
   };
+}
+
+// The quests card with every reward, or with fewer rewards per quest until it fits, then, if even
+// no rewards won't fit, with fewer quests.
+function fittingQuestsCard(dungeon: StoredDungeon): APIEmbed {
+  let fitted = fittingCard((shown) => questsCard(dungeon, shown, maxFields));
+  for (let quests = maxFields - 1; !fits(fitted) && quests > 0; quests -= 1) {
+    fitted = questsCard(dungeon, 0, quests);
+  }
+  return fitted;
 }
 
 // Whether Discord will take the card.
@@ -138,18 +159,18 @@ function fittingCard(card: (maxItemsShown: number) => APIEmbed): APIEmbed {
   return fitted;
 }
 
-type View = "loot" | "quests";
+type CardView = "loot" | "quests";
 
 // Buttons to switch between the two cards, the one showing greyed out. A dungeon with no quests
 // seen has only the loot card, so no buttons.
 function switchButtons(
   dungeon: StoredDungeon,
-  showing: View,
+  showing: CardView,
 ): APIActionRowComponent<APIButtonComponent>[] {
   if (dungeon.quests.length === 0) {
     return [];
   }
-  const button = (view: View, label: string): APIButtonComponent => ({
+  const button = (view: CardView, label: string): APIButtonComponent => ({
     type: ComponentType.Button,
     style: view === showing ? ButtonStyle.Primary : ButtonStyle.Secondary,
     label,
@@ -168,21 +189,21 @@ function switchButtons(
 }
 
 // The dungeon's loot or quests card, with the buttons to switch between them.
-function dungeonReply(dungeon: StoredDungeon, showing: View): CommandReply {
+function dungeonReply(dungeon: StoredDungeon, showing: CardView): CommandReply {
   const card =
     showing === "loot"
       ? fittingCard((shown) => lootCard(dungeon, shown))
-      : fittingCard((shown) => questsCard(dungeon, shown));
-  const components = switchButtons(dungeon, showing);
+      : fittingQuestsCard(dungeon);
+  // Always given, even when empty: an update without them would keep the message's old buttons.
   return {
     embeds: [card],
-    ...(components.length > 0 ? { components } : {}),
+    components: switchButtons(dungeon, showing),
     allowed_mentions: { parse: [] },
   };
 }
 
 // A button's custom ID: "dungeon:", the card it shows, a colon and the dungeon's name.
-const buttonId = /^dungeon:(loot|quests):(.+)$/;
+const buttonIdPattern = /^dungeon:(loot|quests):(.+)$/;
 
 // What players call some of the dungeons, as the words of their names.
 const nicknames: ReadonlyMap<string, string> = new Map([
@@ -281,7 +302,7 @@ export function createDungeonCommand(
       return dungeonReply(dungeon, "loot");
     },
     press: async ({ customId }): Promise<ButtonResponse> => {
-      const [, view, name] = buttonId.exec(customId) ?? [];
+      const [, view, name] = buttonIdPattern.exec(customId) ?? [];
       const dungeon = name === undefined ? undefined : await store.get(name);
       if (dungeon === undefined || (view !== "loot" && view !== "quests")) {
         return {

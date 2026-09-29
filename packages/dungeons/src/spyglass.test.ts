@@ -243,6 +243,44 @@ describe("createSpyglassReader", () => {
     ]);
   });
 
+  it("drops quest details it can't read, and quests without an ID and name, keeping the rest", async () => {
+    const fetch = createFakeFetch({
+      "dungeons/the_made_up_hollow.json": {
+        ...madeUpHollow,
+        quests: [
+          { id: 90_101, name: "Made-up Errand", side: "Neutral", xp: null, objective: 5 },
+          { name: "Made-up Nameless Errand Without An ID" },
+          { id: 90_103, name: "Made-up Rumour", items: "none" },
+        ],
+      },
+    });
+
+    const { dungeons } = await createSpyglassReader({ fetch })();
+
+    expect(dungeons[0]?.quests).toEqual([
+      {
+        id: 90_101,
+        name: "Made-up Errand",
+        side: undefined,
+        className: undefined,
+        requiredLevel: undefined,
+        xp: undefined,
+        objective: undefined,
+        rewards: [],
+      },
+      {
+        id: 90_103,
+        name: "Made-up Rumour",
+        side: undefined,
+        className: undefined,
+        requiredLevel: undefined,
+        xp: undefined,
+        objective: undefined,
+        rewards: [],
+      },
+    ]);
+  });
+
   it("leaves out an item without an English name", async () => {
     const fetch = createFakeFetch({
       "items/items_280000.json": {
