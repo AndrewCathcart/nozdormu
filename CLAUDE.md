@@ -23,8 +23,7 @@ The code, issues, PRs and Actions logs are all public.
 - No real guild data anywhere, including test fixtures, issues and PR descriptions: no real chat, member or character names, channel names, guild Discord IDs, or screenshots. Use made-up data.
 - Never log message content. Log IDs and counts instead.
 - Andy keeps a private project brief outside the repo. Never commit it or copy its contents in.
-- Never fetch Wowhead pages from code; Wowhead blocks it. Link to `https://www.wowhead.com/forever/item=<id>` instead, and never import data copied from Wowhead. The game client's own tables (DB2), as exported by wago.tools, come first: they're Blizzard's data, extracted from the client. Andy allowed community data on 29 September 2026, as long as it's accurate. How we use it: only where its licence allows, downloaded at runtime into Postgres rather than committed, preferring sources that scan Forever itself (such as Spyglass), and labelling anything from original Classic (vmangos, pfQuest) as such, since Forever may have changed it.
-- Replies never name where their data comes from (no "data from wago.tools" or Spyglass footers; Andy, 29 September 2026). A caveat about the data itself, such as "loot may be incomplete", is fine.
+- Never fetch Wowhead pages from code; Wowhead blocks it. Link to `https://www.wowhead.com/forever/item=<id>` instead, and never import data copied from Wowhead. The game client's own tables (DB2), as exported by wago.tools, come first: they're Blizzard's data, extracted from the client. Community data is fine where it's accurate: use it only where its licence allows, download it at runtime into Postgres rather than committing it, prefer sources that scan Forever itself (such as Spyglass), and label anything from original Classic (vmangos, pfQuest) as such, since Forever may have changed it. Credit each source, with its licence, in README.md's "Game data" section.
 
 ## Stack
 
