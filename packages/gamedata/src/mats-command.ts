@@ -34,7 +34,7 @@ function describeMaterials(
       ? ["Made along the way, in order:", ...lines(materials.made)]
       : []),
     wowheadLink(recipe),
-    "-# Recipe data from wago.tools. Transmutes and leather grade-ups aren't broken down.",
+    "-# Transmutes and leather grade-ups aren't broken down.",
   ].join("\n");
 }
 

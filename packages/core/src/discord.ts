@@ -4,7 +4,7 @@ import {
   type RESTPostAPIChannelMessageJSONBody,
   type RESTPostAPIInteractionCallbackJSONBody,
 } from "discord-api-types/v10";
-import { type Client, Events, type REST } from "discord.js";
+import { type Client, Events, type RawFile, type REST } from "discord.js";
 import type { Logger } from "pino";
 import { z } from "zod";
 import type { GuildTarget } from "./command-registration.ts";
@@ -87,8 +87,12 @@ export function routeInteractions(
 
 export type ChannelMessage = RESTPostAPIChannelMessageJSONBody;
 
-// Posts a message in a channel through Discord's REST API.
-export type ChannelPublisher = (channelId: string, message: ChannelMessage) => Promise<void>;
+// Posts a message in a channel through Discord's REST API, uploading any files with it.
+export type ChannelPublisher = (
+  channelId: string,
+  message: ChannelMessage,
+  files?: readonly RawFile[],
+) => Promise<void>;
 
 // Discord allows about 5 messages per 5 seconds in a channel. Posts go out one at a time with this
 // gap after each, so a batch (say, several staff posts after downtime) never bursts.
@@ -100,9 +104,12 @@ function pause(): Promise<void> {
 
 export function createChannelPublisher(rest: Pick<REST, "post">): ChannelPublisher {
   let ready = Promise.resolve();
-  return async (channelId, message) => {
+  return async (channelId, message, files = []) => {
     const posted = ready.then(() =>
-      rest.post(Routes.channelMessages(channelId), { body: message }),
+      rest.post(Routes.channelMessages(channelId), {
+        body: message,
+        ...(files.length > 0 ? { files: [...files] } : {}),
+      }),
     );
     ready = posted.then(pause, pause);
     await posted;

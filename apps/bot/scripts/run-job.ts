@@ -1,7 +1,11 @@
 // Runs one scheduled job once, outside the scheduler, against the real feed and database.
 //   pnpm job <job-name>            does everything the job does, including posting to Discord
 //   pnpm job <job-name> --dry-run  prints what it would post or record, and changes nothing
-// A dry run prints the posts it would make to the terminal, never into the logs.
+// A dry run prints the posts it would make to the terminal, never into the logs, and saves any
+// pictures they carry to the system's temporary folder.
+import { writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { SeenPostStore } from "@nozdormu/blueposts";
 import { type ChannelMessage, createLogger } from "@nozdormu/core";
 import type { DungeonStore } from "@nozdormu/dungeons";
@@ -87,10 +91,10 @@ function asText(message: ChannelMessage): string {
 function readOnlyDungeons(store: DungeonStore): DungeonStore {
   return {
     ...store,
-    replaceAll: (build, dungeons) => {
+    replaceAll: ({ build, dungeons, items }) => {
       logger.info(
-        { event: "dry_run.dungeons", build, dungeons: dungeons.length },
-        "Would replace the stored dungeons",
+        { event: "dry_run.dungeons", build, dungeons: dungeons.length, items: items.length },
+        "Would replace the stored dungeons and items",
       );
       return Promise.resolve();
     },
@@ -104,8 +108,16 @@ function dryRun(deps: FeatureDeps): FeatureDeps {
     gameDataStore: readOnlyGameData(deps.gameDataStore),
     seenStaffPosts: readOnlySeenStaffPosts(deps.seenStaffPosts),
     dungeonStore: readOnlyDungeons(deps.dungeonStore),
-    publish: (channelId, message) => {
+    publish: (channelId, message, files = []) => {
       console.log(`\nDRY RUN: would post in channel ${channelId}:\n${asText(message)}\n`);
+      for (const { name, data } of files) {
+        const path = join(tmpdir(), `nozdormu-dry-run-${name}`);
+        writeFileSync(
+          path,
+          typeof data === "string" || data instanceof Uint8Array ? data : String(data),
+        );
+        console.log(`DRY RUN: with ${name}, saved to ${path}\n`);
+      }
       return Promise.resolve();
     },
   };

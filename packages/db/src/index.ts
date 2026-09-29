@@ -13,6 +13,8 @@ export {
   items,
   recipeReagents,
   recipes,
+  scannedItemStats,
+  scannedItems,
   youtubeChannels,
   youtubeVideos,
 } from "./schema.ts";

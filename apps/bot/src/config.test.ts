@@ -7,6 +7,10 @@ const validEnv = {
   DISCORD_GUILD_ID: "200000000000000002",
   DATABASE_URL: "postgres://made-up-user:made-up-password@localhost:5432/nozdormu",
   YOUTUBE_ALERT_CHANNEL_ID: "300000000000000003",
+  ANTHROPIC_API_KEY: "made-up-key",
+  OPENAI_API_KEY: "made-up-openai-key",
+  DIGEST_CHANNEL_IDS: "300000000000000004,300000000000000005",
+  DIGEST_POST_CHANNEL_ID: "300000000000000006",
   FOREVER_NEWS_CHANNEL_ID: "300000000000000007",
 };
 
@@ -22,6 +26,12 @@ describe("loadConfig", () => {
         },
         database: { url: "postgres://made-up-user:made-up-password@localhost:5432/nozdormu" },
         youtube: { alertChannelId: "300000000000000003" },
+        anthropic: { apiKey: "made-up-key" },
+        openai: { apiKey: "made-up-openai-key" },
+        digest: {
+          channelIds: ["300000000000000004", "300000000000000005"],
+          postChannelId: "300000000000000006",
+        },
         foreverNews: { channelId: "300000000000000007" },
       },
     });
@@ -36,6 +46,10 @@ describe("loadConfig", () => {
           "DISCORD_GUILD_ID is missing.",
           "DATABASE_URL is missing.",
           "YOUTUBE_ALERT_CHANNEL_ID is missing.",
+          "ANTHROPIC_API_KEY is missing.",
+          "OPENAI_API_KEY is missing.",
+          "DIGEST_CHANNEL_IDS is missing.",
+          "DIGEST_POST_CHANNEL_ID is missing.",
           "FOREVER_NEWS_CHANNEL_ID is missing.",
         ],
       },
@@ -51,6 +65,25 @@ describe("loadConfig", () => {
         "DISCORD_APPLICATION_ID must be a Discord ID (17 to 20 digits).",
         "DISCORD_GUILD_ID must be a Discord ID (17 to 20 digits).",
       ],
+    });
+  });
+
+  it("reads a list of channel IDs separated by commas and spaces", () => {
+    const loaded = loadConfig({
+      ...validEnv,
+      DIGEST_CHANNEL_IDS: " 300000000000000004, 300000000000000005 ",
+    });
+
+    expect(loaded.ok && loaded.config.digest.channelIds).toEqual([
+      "300000000000000004",
+      "300000000000000005",
+    ]);
+  });
+
+  it("names a channel list with something in it that isn't a Discord ID, without repeating it", () => {
+    expect(loadConfig({ ...validEnv, DIGEST_CHANNEL_IDS: "300000000000000004,general" })).toEqual({
+      ok: false,
+      problems: ["DIGEST_CHANNEL_IDS must be Discord IDs (17 to 20 digits) separated by commas."],
     });
   });
 

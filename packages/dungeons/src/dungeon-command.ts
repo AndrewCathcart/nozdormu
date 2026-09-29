@@ -4,17 +4,62 @@ import {
   maxAutocompleteChoices,
   type SlashCommand,
 } from "@nozdormu/core";
-import { ApplicationCommandOptionType, MessageFlags } from "discord-api-types/v10";
+import { type APIEmbed, ApplicationCommandOptionType, MessageFlags } from "discord-api-types/v10";
 import type { DungeonStore, DungeonSummary, StoredDungeon } from "./dungeon-store.ts";
+import { itemDetails } from "./item-text.ts";
 
-// Discord's limit on a message's length.
-const maxMessageLength = 2000;
+// Discord's limits on a card: its sections, each section's text, and the whole card's text.
+const maxFields = 25;
+const maxFieldLength = 1024;
+const maxCardLength = 6000;
 
-// The loot shown for a boss: all of it, or the first few and how many more.
-function lootList(loot: StoredDungeon["bosses"][number]["loot"], maxShown: number): string {
-  const names = loot.slice(0, maxShown).map((item) => escapeMarkdown(item.name));
-  const more = loot.length - names.length;
-  return names.join(", ") + (more > 0 ? ` and ${String(more)} more` : "");
+// WoW's colour for epic items.
+const epicPurple = 0xa3_35_ee;
+
+// A boss's loot, one linked item a line: all of it, or the first few and how many more.
+function lootLines(loot: StoredDungeon["bosses"][number]["loot"], maxShown: number): string {
+  if (loot.length === 0) {
+    return "No loot seen yet";
+  }
+  const lines = loot.slice(0, maxShown).map((item) => {
+    const link = `[${escapeMarkdown(item.name)}](https://www.wowhead.com/forever/item=${String(item.itemId)})`;
+    const details = item.scanned === undefined ? "" : itemDetails(item.scanned);
+    return details === "" ? link : `${link} · ${details}`;
+  });
+  const more = loot.length - lines.length;
+  return [...lines, ...(more > 0 ? [`and ${String(more)} more`] : [])].join("\n");
+}
+
+// The card showing a dungeon: its levels, then a section per boss listing its loot.
+function dungeonCard(dungeon: StoredDungeon, maxLootShown: number): APIEmbed {
+  const entry =
+    dungeon.requiredLevel === undefined
+      ? ""
+      : ` · enter from level ${String(dungeon.requiredLevel)}`;
+  return {
+    color: epicPurple,
+    title: escapeMarkdown(dungeon.name),
+    description: `Levels ${String(dungeon.minLevel)}–${String(dungeon.maxLevel)}${entry}`,
+    fields: dungeon.bosses.slice(0, maxFields).map((boss) => ({
+      name: boss.name,
+      value: lootLines(boss.loot, maxLootShown),
+    })),
+    footer: {
+      text: "Loot may be incomplete, and has no drop chances.",
+    },
+  };
+}
+
+// Whether Discord will take the card.
+function fits(card: APIEmbed): boolean {
+  const fields = card.fields ?? [];
+  const length = [
+    card.title,
+    card.description,
+    card.footer?.text,
+    ...fields.flatMap((field) => [field.name, field.value]),
+  ].reduce((total, text) => total + (text ?? "").length, 0);
+  return length <= maxCardLength && fields.every((field) => field.value.length <= maxFieldLength);
 }
 
 // What players call some of the dungeons, as the words of their names.
@@ -68,20 +113,6 @@ function levels(dungeon: Pick<StoredDungeon, "minLevel" | "maxLevel">): string {
   return `levels ${String(dungeon.minLevel)}–${String(dungeon.maxLevel)}`;
 }
 
-function describeDungeon(dungeon: StoredDungeon, maxLootShown: number): string {
-  const entry =
-    dungeon.requiredLevel === undefined ? "" : `, enter from ${String(dungeon.requiredLevel)}`;
-  return [
-    `**${escapeMarkdown(dungeon.name)}** · ${levels(dungeon)}${entry}`,
-    ...dungeon.bosses.map(
-      (boss) =>
-        `- **${escapeMarkdown(boss.name)}**` +
-        (boss.loot.length === 0 ? "" : `: ${lootList(boss.loot, maxLootShown)}`),
-    ),
-    `-# Bosses and loot from Spyglass's scans, as of build ${dungeon.build}. Loot may be incomplete, and has no drop chances.`,
-  ].join("\n");
-}
-
 // /dungeon: suggests Forever's dungeons as you type, then shows the one you pick: its levels, and its
 // bosses with the loot seen from each. They're listed in the game's encounter order, which isn't
 // always the order they're fought in, so they aren't numbered.
@@ -125,12 +156,12 @@ export function createDungeonCommand(
           flags: MessageFlags.Ephemeral,
         };
       }
-      // When all the loot won't fit in one message, show fewer items per boss until it does.
-      let content = describeDungeon(dungeon, Number.POSITIVE_INFINITY);
-      for (let shown = 5; content.length > maxMessageLength && shown >= 0; shown -= 1) {
-        content = describeDungeon(dungeon, shown);
+      // When all the loot won't fit on one card, show fewer items per boss until it does.
+      let card = dungeonCard(dungeon, Number.POSITIVE_INFINITY);
+      for (let shown = 8; !fits(card) && shown >= 0; shown -= 1) {
+        card = dungeonCard(dungeon, shown);
       }
-      return { content, allowed_mentions: { parse: [] } };
+      return { embeds: [card], allowed_mentions: { parse: [] } };
     },
     autocomplete: async (query) => {
       const found = matching(await store.list(), query.value);

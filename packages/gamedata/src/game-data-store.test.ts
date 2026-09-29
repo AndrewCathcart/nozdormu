@@ -131,41 +131,32 @@ describe("game data store", () => {
     ]);
   });
 
-  it("finds recipes whose name contains the text, names starting with it first, then shorter ones", async () => {
+  it("finds recipes whose name contains the text, lowest skill level first", async () => {
     const store = createGameDataStore(database.db);
+    const atSkill = (spellId: number, name: string, yellowAt: number): RecipeRecord => ({
+      ...recipe(spellId, name),
+      skillLevels: { yellowAt, greyAt: yellowAt + 50 },
+    });
     await importBuild(
       store,
       "1.60.1.1105",
       [item(1, "Made-up Anvil")],
       [
-        recipe(900_001, "Made-up Sword of Plenty"),
-        recipe(900_002, "Made-up Sword"),
-        recipe(900_003, "Sword-shaped Made-up Charm"),
-        recipe(900_004, "Made-up Helm"),
+        atSkill(900_001, "Made-up Sword of Plenty", 150),
+        { ...recipe(900_005, "Made-up Trainer Sword"), skillLevels: undefined },
+        atSkill(900_002, "Made-up Sword", 50),
+        atSkill(900_003, "Sword-shaped Made-up Charm", 100),
+        atSkill(900_004, "Made-up Helm", 10),
       ],
     );
 
     const found = await store.searchRecipes("sword", 25);
 
-    expect(found).toEqual([
-      {
-        spellId: 900_003,
-        name: "Sword-shaped Made-up Charm",
-        professions: ["Blacksmithing", "Leatherworking"],
-        skillLevels: { yellowAt: 50, greyAt: 100 },
-      },
-      {
-        spellId: 900_002,
-        name: "Made-up Sword",
-        professions: ["Blacksmithing", "Leatherworking"],
-        skillLevels: { yellowAt: 50, greyAt: 100 },
-      },
-      {
-        spellId: 900_001,
-        name: "Made-up Sword of Plenty",
-        professions: ["Blacksmithing", "Leatherworking"],
-        skillLevels: { yellowAt: 50, greyAt: 100 },
-      },
+    expect(found.map((summary) => summary.name)).toEqual([
+      "Made-up Sword",
+      "Sword-shaped Made-up Charm",
+      "Made-up Sword of Plenty",
+      "Made-up Trainer Sword",
     ]);
   });
 

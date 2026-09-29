@@ -119,3 +119,18 @@ describe("createChannelPublisher", () => {
     });
   });
 });
+
+describe("createChannelPublisher", () => {
+  it("posts the message in the channel, uploading any files with it", async () => {
+    const rest = { post: vi.fn<REST["post"]>().mockResolvedValue({}) } satisfies Pick<REST, "post">;
+
+    await createChannelPublisher(rest)(channelId, { content: "Made-up masthead" }, [
+      { name: "this-week.jpg", data: new Uint8Array([1, 2, 3]) },
+    ]);
+
+    expect(rest.post).toHaveBeenCalledExactlyOnceWith(Routes.channelMessages(channelId), {
+      body: { content: "Made-up masthead" },
+      files: [{ name: "this-week.jpg", data: new Uint8Array([1, 2, 3]) }],
+    });
+  });
+});

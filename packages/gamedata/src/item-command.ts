@@ -120,7 +120,6 @@ export function createItemCommand(
           `**${escapeMarkdown(item.name)}**`,
           describeItem(item),
           `https://www.wowhead.com/forever/item=${String(item.id)}`,
-          "-# Item data from wago.tools",
         ].join("\n"),
         allowed_mentions: { parse: [] },
       };
