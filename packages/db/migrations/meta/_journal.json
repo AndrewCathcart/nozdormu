@@ -78,6 +78,13 @@
       "when": 1790701810531,
       "tag": "0010_blue_posts",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1790702577836,
+      "tag": "0011_calendar_reminders",
+      "breakpoints": true
     }
   ]
 }

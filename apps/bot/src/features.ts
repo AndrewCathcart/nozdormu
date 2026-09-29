@@ -7,6 +7,12 @@ import {
   type SeenPostStore,
 } from "@nozdormu/blueposts";
 import {
+  createCalendarFeature,
+  createPostedReminderStore,
+  foreverMilestones,
+  type PostedReminderStore,
+} from "@nozdormu/calendar";
+import {
   type ChannelPublisher,
   createChannelPublisher,
   createRecentPostReader,
@@ -77,6 +83,7 @@ export interface FeatureDeps {
   readonly readStaffPosts: ForumReader;
   readonly seenStaffPosts: SeenPostStore;
   readonly logger: Pick<Logger, "info" | "warn" | "error">;
+  readonly postedReminders: PostedReminderStore;
   readonly readSpyglass: SpyglassReader;
   readonly dungeonStore: DungeonStore;
 }
@@ -105,6 +112,7 @@ export function createFeatureDeps(
     now: () => new Date(),
     readStaffPosts: createForumReader({ fetch, forum: euForums.address }),
     seenStaffPosts: createSeenPostStore(db),
+    postedReminders: createPostedReminderStore(db),
     readSpyglass: createSpyglassReader({ fetch }),
     dungeonStore: createDungeonStore(db),
   };
@@ -145,6 +153,14 @@ export function createFeatures(deps: FeatureDeps): Feature[] {
       seenPosts: deps.seenStaffPosts,
       publish: deps.publish,
       recentPosts: deps.recentPosts,
+      logger: deps.logger,
+    }),
+    createCalendarFeature({
+      newsChannelId: deps.config.foreverNews.channelId,
+      milestones: foreverMilestones,
+      now: deps.now,
+      posted: deps.postedReminders,
+      publish: deps.publish,
       logger: deps.logger,
     }),
     createDungeonFeature({
