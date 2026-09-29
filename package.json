@@ -1,0 +1,31 @@
+{
+  "name": "nozdormu",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "prepare": "lefthook install",
+    "check": "pnpm fmt:check && pnpm lint && pnpm typecheck && pnpm test",
+    "fmt": "oxfmt",
+    "fmt:check": "oxfmt --check",
+    "lint": "oxlint --type-aware --deny-warnings",
+    "typecheck": "tsc",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.3",
+    "lefthook": "2.1.14",
+    "oxfmt": "0.70.0",
+    "oxlint": "1.85.0",
+    "oxlint-tsgolint": "7.0.2003",
+    "typescript": "7.0.2",
+    "vitest": "5.0.2"
+  },
+  "devEngines": {
+    "runtime": {
+      "name": "node",
+      "version": "^26.10.0",
+      "onFail": "download"
+    }
+  },
+  "packageManager": "pnpm@12.6.0"
+}

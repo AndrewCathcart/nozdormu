@@ -1,0 +1,14 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", "helpers:pinGitHubActionDigests"],
+  "timezone": "Europe/London",
+  "minimumReleaseAge": "3 days",
+  "packageRules": [
+    {
+      "description": "Batch non-major updates into one weekly PR.",
+      "matchUpdateTypes": ["minor", "patch", "digest", "pin"],
+      "groupName": "non-major dependencies",
+      "schedule": ["before 6am on monday"]
+    }
+  ]
+}
