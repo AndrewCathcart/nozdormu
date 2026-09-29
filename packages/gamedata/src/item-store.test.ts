@@ -17,6 +17,7 @@ describe("item store", () => {
 
     expect(await store.get(2)).toEqual(item(2, "Made-up Helm"));
   });
+
   it("records which build it imported", async () => {
     const store = createItemStore(database.db);
 
@@ -92,6 +93,7 @@ describe("item store", () => {
 
     expect(found.map((match) => match.name)).toEqual(["Made-up 50% Potion"]);
   });
+
   it("leaves deprecated, test and placeholder items out of searches", async () => {
     const store = createItemStore(database.db);
     await store.replaceAll("1.60.1.1010", [

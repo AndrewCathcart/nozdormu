@@ -14,9 +14,10 @@ export interface BuildCheckDeps {
   readonly source: GameDataSource;
   readonly items: ItemStore;
   readonly logger: Pick<Logger, "info">;
-  // An import with fewer items than this is treated as a failed download. Forever has about 19,000.
-  readonly minimumItems?: number;
 }
+
+// A download with fewer items than this is treated as a failed one. Forever has about 19,000.
+const minimumItems = 1000;
 
 // Forever's client builds are 1.60 and up. The product we follow has carried other games' betas
 // before, so anything else is skipped.
@@ -43,7 +44,6 @@ export function createBuildCheckJob(deps: BuildCheckDeps): ScheduledJob {
     }
     const startedAt = performance.now();
     const records = parseItemSparse(await deps.source.itemSparse(latest));
-    const minimumItems = deps.minimumItems ?? 1000;
     if (records.length < minimumItems) {
       throw new Error(
         `wago.tools gave only ${String(records.length)} items for build ${latest}, so the stored items were kept.`,

@@ -4,25 +4,32 @@ import { createBuildCheckJob, type GameDataSource } from "./build-check.ts";
 import type { ItemRecord } from "./item-sparse.ts";
 import type { ItemStore } from "./item-store.ts";
 
-const itemSparseCsv = [
-  "ID,Display_lang,ItemLevel,OverallQualityID,RequiredLevel,InventoryType",
-  "270001,Made-up Sword of Testing,42,3,37,13",
-].join("\n");
+// A made-up ItemSparse export: swords numbered from 1, with IDs from 270001.
+function itemSparseCsv(itemCount: number): string {
+  const rows = Array.from(
+    { length: itemCount },
+    (_, index) => `${String(270_001 + index)},Made-up Sword ${String(index + 1)},42,3,37,13`,
+  );
+  return ["ID,Display_lang,ItemLevel,OverallQualityID,RequiredLevel,InventoryType", ...rows].join(
+    "\n",
+  );
+}
 
-const madeUpSword: ItemRecord = {
-  id: 270001,
-  name: "Made-up Sword of Testing",
+const firstSword: ItemRecord = {
+  id: 270_001,
+  name: "Made-up Sword 1",
   quality: 3,
   itemLevel: 42,
   requiredLevel: 37,
   inventoryType: 13,
 };
 
+// Downloads return 1,000 items, the fewest the job accepts.
 function createDeps(latest: string, imported?: string) {
   return {
     source: {
       latestBuild: vi.fn<GameDataSource["latestBuild"]>().mockResolvedValue(latest),
-      itemSparse: vi.fn<GameDataSource["itemSparse"]>().mockResolvedValue(itemSparseCsv),
+      itemSparse: vi.fn<GameDataSource["itemSparse"]>().mockResolvedValue(itemSparseCsv(1000)),
     },
     items: {
       importedVersion: vi.fn<ItemStore["importedVersion"]>().mockResolvedValue(imported),
@@ -31,8 +38,6 @@ function createDeps(latest: string, imported?: string) {
       search: vi.fn<ItemStore["search"]>(),
     },
     logger: { info: vi.fn<Logger["info"]>() } satisfies Pick<Logger, "info">,
-    // The made-up CSV has a single item.
-    minimumItems: 1,
   };
 }
 
@@ -43,8 +48,16 @@ describe("build check", () => {
     await createBuildCheckJob(deps).run();
 
     expect(deps.source.itemSparse).toHaveBeenCalledExactlyOnceWith("1.60.1.70009");
-    expect(deps.items.replaceAll).toHaveBeenCalledExactlyOnceWith("1.60.1.70009", [madeUpSword]);
+    expect(deps.items.replaceAll).toHaveBeenCalledExactlyOnceWith(
+      "1.60.1.70009",
+      expect.anything(),
+    );
+    const records = deps.items.replaceAll.mock.calls[0]?.[1];
+    expect(records).toHaveLength(1000);
+    expect(records?.[0]).toEqual(firstSword);
+    expect(records?.[999]?.name).toBe("Made-up Sword 1000");
   });
+
   it("doesn't import a build it has already imported", async () => {
     const deps = createDeps("1.60.1.70009", "1.60.1.70009");
 
@@ -76,15 +89,17 @@ describe("build check", () => {
     await createBuildCheckJob(deps).run();
 
     expect(deps.logger.info).toHaveBeenCalledExactlyOnceWith(
-      expect.objectContaining({ event: "gamedata.imported", version: "1.60.1.70009", items: 1 }),
+      expect.objectContaining({ event: "gamedata.imported", version: "1.60.1.70009", items: 1000 }),
       "Imported a new game build",
     );
   });
-  it("refuses a build with suspiciously few items, keeping the stored ones", async () => {
-    const deps = createDeps("1.60.1.70009", "1.60.1.69893");
 
-    await expect(createBuildCheckJob({ ...deps, minimumItems: 2 }).run()).rejects.toThrow(
-      "wago.tools gave only 1 items for build 1.60.1.70009, so the stored items were kept.",
+  it("refuses a build with fewer than 1,000 items, keeping the stored ones", async () => {
+    const deps = createDeps("1.60.1.70009", "1.60.1.69893");
+    deps.source.itemSparse.mockResolvedValue(itemSparseCsv(999));
+
+    await expect(createBuildCheckJob(deps).run()).rejects.toThrow(
+      "wago.tools gave only 999 items for build 1.60.1.70009, so the stored items were kept.",
     );
 
     expect(deps.items.replaceAll).not.toHaveBeenCalled();
@@ -106,6 +121,9 @@ describe("build check", () => {
 
     await createBuildCheckJob(deps).run();
 
-    expect(deps.items.replaceAll).toHaveBeenCalledOnce();
+    expect(deps.items.replaceAll).toHaveBeenCalledExactlyOnceWith(
+      "1.70.0.80000",
+      expect.anything(),
+    );
   });
 });

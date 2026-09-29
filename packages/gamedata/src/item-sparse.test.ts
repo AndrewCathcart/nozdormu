@@ -30,6 +30,7 @@ describe("parseItemSparse", () => {
       },
     ]);
   });
+
   it("refuses a file without the columns it needs", () => {
     expect(() => parseItemSparse("ID,Name\n1,Something")).toThrow(
       new Error("ItemSparse didn't have the expected columns."),

@@ -94,8 +94,9 @@ function choiceName(item: ItemRecord): string {
 export function createItemCommand(items: ItemStore): SlashCommand {
   const find = async (value: string): Promise<ItemRecord | undefined> => {
     // A picked suggestion sends the item's ID; text typed without picking one is searched for.
-    if (/^\d+$/.test(value) && Number(value) <= maxItemId) {
-      return items.get(Number.parseInt(value, 10));
+    const id = Number.parseInt(value, 10);
+    if (/^\d+$/.test(value) && id <= maxItemId) {
+      return items.get(id);
     }
     const [best] = await items.search(value, 1);
     return best;
@@ -117,7 +118,8 @@ export function createItemCommand(items: ItemStore): SlashCommand {
     },
     handle: async (invocation) => {
       const value = invocation.options.get("name");
-      const item = typeof value === "string" ? await find(value.trim()) : undefined;
+      const text = typeof value === "string" ? value.trim() : "";
+      const item = text === "" ? undefined : await find(text);
       if (item === undefined) {
         return (await items.importedVersion()) === undefined ? notLoaded : notFound;
       }

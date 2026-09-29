@@ -93,6 +93,15 @@ describe("/item", () => {
     });
   });
 
+  it("replies privately to a blank name instead of looking it up", async () => {
+    const command = createItemCommand(createFakeItems([madeUpSword]));
+
+    expect(await command.handle(invoke("  "))).toEqual({
+      content: "I couldn't find that item. Start typing its name and pick one of the suggestions.",
+      flags: MessageFlags.Ephemeral,
+    });
+  });
+
   it("suggests matching items, labelled with their kind and item level, valued by their ID", async () => {
     const command = createItemCommand(createFakeItems([madeUpSword]));
 
@@ -138,13 +147,12 @@ describe("/item", () => {
   });
 
   it("treats a number too big to be an item ID as text to search for", async () => {
-    const items = createFakeItems([madeUpSword]);
-    const command = createItemCommand(items);
+    const numbered = { ...madeUpSword, id: 270005, name: "Made-up Charm No. 99999999999" };
+    const command = createItemCommand(createFakeItems([numbered]));
 
-    await command.handle(invoke("99999999999"));
+    const reply = await command.handle(invoke("99999999999"));
 
-    expect(items.get).not.toHaveBeenCalled();
-    expect(items.search).toHaveBeenCalledExactlyOnceWith("99999999999", 1);
+    expect(reply.content?.split("\n")[0]).toBe("**Made-up Charm No. 99999999999**");
   });
 
   it("says the item data isn't loaded yet when no build has been imported", async () => {
