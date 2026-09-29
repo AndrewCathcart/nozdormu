@@ -8,8 +8,7 @@ const transmute: RecipeRecord = {
   spellId: 900_001,
   name: "Transmute: Made-up Metal",
   professions: ["Alchemy"],
-  itemId: 270_001,
-  itemCount: 1,
+  result: { kind: "item", itemId: 270_001, count: 1 },
   reagents: [
     { itemId: 270_010, count: 1 },
     { itemId: 270_011, count: 2 },
@@ -23,6 +22,7 @@ const madeUpItemNames = new Map([
   [270_010, "Made-up Ore"],
   [270_011, "Made-up Crystal"],
   [270_012, "Made-up_Underscored_Dust"],
+  [270_101, "Formula: Enchant Made-up Bracer - Testing"],
   [270_100, "Recipe: Transmute Made-up Metal"],
 ]);
 
@@ -75,6 +75,30 @@ describe("/recipe", () => {
     });
   });
 
+  it("replies to an enchant without an item, linking the enchant itself", async () => {
+    const enchant: RecipeRecord = {
+      ...transmute,
+      name: "Enchant Made-up Bracer - Testing",
+      professions: ["Enchanting"],
+      result: { kind: "enchant" },
+      taughtBy: [270_101],
+    };
+    const command = createRecipeCommand(createFakeStore([enchant]));
+
+    const reply = await command.handle(invoke("900001"));
+
+    expect(reply.content).toBe(
+      [
+        "**Enchant Made-up Bracer - Testing** · Enchanting",
+        "Reagents: 1 × Made-up Ore, 2 × Made-up Crystal",
+        "Turns yellow at 275 and grey at 290",
+        "Taught by Formula: Enchant Made-up Bracer - Testing",
+        "https://www.wowhead.com/forever/spell=900001",
+        "-# Recipe data from wago.tools",
+      ].join("\n"),
+    );
+  });
+
   it("leaves out reagents, skill levels and teachers the game data doesn't have", async () => {
     const bare = { ...transmute, reagents: [], skillLevels: undefined, taughtBy: [] };
     const command = createRecipeCommand(createFakeStore([bare]));
@@ -101,7 +125,11 @@ describe("/recipe", () => {
   });
 
   it("escapes Markdown in recipe and item names", async () => {
-    const starred = { ...transmute, name: "Made-up *Starred* Brew", itemId: 270_012 };
+    const starred: RecipeRecord = {
+      ...transmute,
+      name: "Made-up *Starred* Brew",
+      result: { kind: "item", itemId: 270_012, count: 1 },
+    };
     const command = createRecipeCommand(createFakeStore([starred]));
 
     const reply = await command.handle(invoke("900001"));

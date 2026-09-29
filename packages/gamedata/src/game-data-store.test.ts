@@ -26,8 +26,7 @@ function recipe(spellId: number, name: string): RecipeRecord {
     spellId,
     name,
     professions: ["Blacksmithing", "Leatherworking"],
-    itemId: 1,
-    itemCount: 2,
+    result: { kind: "item", itemId: 1, count: 2 },
     reagents: [
       { itemId: 3, count: 4 },
       { itemId: 2, count: 1 },
@@ -49,6 +48,33 @@ describe("game data store", () => {
     );
 
     expect(await store.getRecipe(900_002)).toEqual(recipe(900_002, "Made-up Other Sword"));
+  });
+
+  it("keeps an enchant, which makes no item", async () => {
+    const store = createGameDataStore(database.db);
+    const enchant: RecipeRecord = {
+      ...recipe(900_001, "Enchant Made-up Bracer - Testing"),
+      professions: ["Enchanting"],
+      result: { kind: "enchant" },
+    };
+
+    await importBuild(store, "1.60.1.1111", [], [enchant]);
+
+    expect(await store.getRecipe(900_001)).toEqual(enchant);
+  });
+
+  it("finds an enchant, which makes no item, by its name", async () => {
+    const store = createGameDataStore(database.db);
+    const enchant: RecipeRecord = {
+      ...recipe(900_001, "Enchant Made-up Cloak - Testing"),
+      professions: ["Enchanting"],
+      result: { kind: "enchant" },
+    };
+    await importBuild(store, "1.60.1.1112", [], [enchant]);
+
+    const found = await store.searchRecipes("cloak", 25);
+
+    expect(found.map((match) => match.name)).toEqual(["Enchant Made-up Cloak - Testing"]);
   });
 
   it("keeps a recipe without skill levels", async () => {
@@ -116,7 +142,12 @@ describe("game data store", () => {
       store,
       "1.60.1.1106",
       [item(7, "Made-up Metal Bar")],
-      [{ ...recipe(900_001, "Transmute: Made-up Metal"), itemId: 7 }],
+      [
+        {
+          ...recipe(900_001, "Transmute: Made-up Metal"),
+          result: { kind: "item", itemId: 7, count: 1 },
+        },
+      ],
     );
 
     const found = await store.searchRecipes("metal bar", 25);

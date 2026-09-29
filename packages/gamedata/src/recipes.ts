@@ -17,6 +17,12 @@ export interface SkillLevels {
   readonly greyAt: number;
 }
 
+// What a recipe does: makes an item, or enchants one (Enchanting's enchants, and a few of
+// Engineering's tinkers).
+export type RecipeResult =
+  | { readonly kind: "item"; readonly itemId: number; readonly count: number }
+  | { readonly kind: "enchant" };
+
 export interface Reagent {
   readonly itemId: number;
   readonly count: number;
@@ -28,8 +34,7 @@ export interface RecipeRecord {
   readonly name: string;
   // Usually one; a few recipes belong to two professions.
   readonly professions: readonly string[];
-  readonly itemId: number;
-  readonly itemCount: number;
+  readonly result: RecipeResult;
   readonly reagents: readonly Reagent[];
   // Undefined where the game data has none.
   readonly skillLevels: SkillLevels | undefined;
@@ -86,8 +91,28 @@ const itemEffectRow = z.object({ ID: wholeNumber, TriggerType: wholeNumber, Spel
 
 const itemXItemEffectRow = z.object({ ItemEffectID: wholeNumber, ItemID: wholeNumber });
 
-// SpellEffect's Effect for "create an item".
+// SpellEffect's Effects for "create an item" and "enchant an item".
 const createItemEffect = 24;
+const enchantItemEffect = 53;
+
+// What each spell that makes or enchants an item does, by spell ID. Making an item wins over
+// enchanting one.
+function spellResults(csv: string): Map<number, RecipeResult> {
+  const results = new Map<number, RecipeResult>();
+  for (const effect of readTable("SpellEffect", csv, spellEffectRow)) {
+    if (effect.Effect === createItemEffect && effect.EffectItemType !== 0) {
+      results.set(effect.SpellID, {
+        kind: "item",
+        itemId: effect.EffectItemType,
+        // Like the game server, treat a count below 1 as 1.
+        count: Math.max(1, Math.round(effect.EffectBasePointsF)),
+      });
+    } else if (effect.Effect === enchantItemEffect && !results.has(effect.SpellID)) {
+      results.set(effect.SpellID, { kind: "enchant" });
+    }
+  }
+  return results;
+}
 
 // ItemEffect's TriggerType for "teaches this spell".
 const learnSpellTrigger = 6;
@@ -137,11 +162,7 @@ export function parseRecipes(tables: Readonly<Record<RecipeTable, string>>): Rec
   const spellNames = new Map(
     readTable("SpellName", tables.SpellName, spellNameRow).map((row) => [row.ID, row.Name_lang]),
   );
-  const itemsMade = new Map(
-    readTable("SpellEffect", tables.SpellEffect, spellEffectRow)
-      .filter((effect) => effect.Effect === createItemEffect && effect.EffectItemType !== 0)
-      .map((effect) => [effect.SpellID, effect]),
-  );
+  const results = spellResults(tables.SpellEffect);
   const reagents = new Map(
     readTable("SpellReagents", tables.SpellReagents, spellReagentsRow).map((row) => [
       row.SpellID,
@@ -159,9 +180,9 @@ export function parseRecipes(tables: Readonly<Record<RecipeTable, string>>): Rec
     skillLineAbilityRow,
   )) {
     const profession = skillLines.get(ability.SkillLine);
-    const made = itemsMade.get(ability.Spell);
+    const result = results.get(ability.Spell);
     const name = spellNames.get(ability.Spell);
-    if (profession === undefined || made === undefined || name === undefined) {
+    if (profession === undefined || result === undefined || name === undefined) {
       continue;
     }
     const existing = recipes.get(ability.Spell);
@@ -178,9 +199,7 @@ export function parseRecipes(tables: Readonly<Record<RecipeTable, string>>): Rec
       spellId: ability.Spell,
       name,
       professions: [profession.DisplayName_lang],
-      itemId: made.EffectItemType,
-      // Like the game server, treat a count below 1 as 1.
-      itemCount: Math.max(1, Math.round(made.EffectBasePointsF)),
+      result,
       reagents: reagents.get(ability.Spell) ?? [],
       // The game data has 0 for "none".
       skillLevels:

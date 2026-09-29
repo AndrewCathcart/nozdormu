@@ -41,8 +41,7 @@ describe("parseRecipes", () => {
         spellId: 900_001,
         name: "Made-up Sword of Testing",
         professions: ["Blacksmithing"],
-        itemId: 270_001,
-        itemCount: 1,
+        result: { kind: "item", itemId: 270_001, count: 1 },
         reagents: [
           { itemId: 270_010, count: 3 },
           { itemId: 270_011, count: 1 },
@@ -71,7 +70,9 @@ describe("parseRecipes", () => {
       }),
     );
 
-    expect(recipes.map((recipe) => recipe.itemCount)).toEqual([1]);
+    expect(recipes.map((recipe) => recipe.result)).toEqual([
+      { kind: "item", itemId: 270_001, count: 1 },
+    ]);
   });
 
   it("takes the item from the effect that makes it, ignoring the spell's other effects", () => {
@@ -81,7 +82,55 @@ describe("parseRecipes", () => {
       }),
     );
 
-    expect(recipes.map((recipe) => [recipe.itemId, recipe.itemCount])).toEqual([[270_001, 1]]);
+    expect(recipes.map((recipe) => recipe.result)).toEqual([
+      { kind: "item", itemId: 270_001, count: 1 },
+    ]);
+  });
+
+  // Enchanting's enchants (effect 53, "enchant item") make nothing; they enchant what you're wearing.
+  it("reads an enchant as a recipe that makes no item", () => {
+    const recipes = parseRecipes(
+      tables({
+        SpellName: csv([
+          ["ID", "Name_lang"],
+          [900_001, "Enchant Made-up Bracer - Testing"],
+        ]),
+        SpellEffect: csv([spellEffectHeader, [1, 900_001, 53, 0, 0]]),
+      }),
+    );
+
+    expect(recipes.map((recipe) => [recipe.name, recipe.result])).toEqual([
+      ["Enchant Made-up Bracer - Testing", { kind: "enchant" }],
+    ]);
+  });
+
+  it("counts a spell that both makes and enchants an item as making it, whatever the order", () => {
+    const recipes = parseRecipes(
+      tables({
+        SkillLineAbility: csv([
+          skillLineAbilityHeader,
+          [1, 164, 900_001, 50, 100],
+          [2, 164, 900_002, 50, 100],
+        ]),
+        SpellName: csv([
+          ["ID", "Name_lang"],
+          [900_001, "Made-up Sword of Testing"],
+          [900_002, "Made-up Shield of Testing"],
+        ]),
+        SpellEffect: csv([
+          spellEffectHeader,
+          [1, 900_001, 53, 0, 0],
+          [2, 900_001, 24, 270_001, 1],
+          [3, 900_002, 24, 270_002, 1],
+          [4, 900_002, 53, 0, 0],
+        ]),
+      }),
+    );
+
+    expect(recipes.map((recipe) => recipe.result)).toEqual([
+      { kind: "item", itemId: 270_001, count: 1 },
+      { kind: "item", itemId: 270_002, count: 1 },
+    ]);
   });
 
   // Mages' Conjure spells make items too, from a class skill line (category 7).

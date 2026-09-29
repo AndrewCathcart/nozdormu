@@ -1,7 +1,7 @@
 import { type Database, gameBuilds, items, recipeReagents, recipes } from "@nozdormu/db";
 import { and, asc, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import type { ItemRecord } from "./item-sparse.ts";
-import type { RecipeRecord, SkillLevels } from "./recipes.ts";
+import type { RecipeRecord, RecipeResult, SkillLevels } from "./recipes.ts";
 
 export interface ImportedBuild {
   readonly version: string;
@@ -57,6 +57,11 @@ function escapeLike(text: string): string {
   return text.replaceAll(/[\\%_]/g, (character) => `\\${character}`);
 }
 
+// The recipes table keeps the item and its count null for an enchant.
+function resultOf(itemId: number | null, count: number | null): RecipeResult {
+  return itemId === null || count === null ? { kind: "enchant" } : { kind: "item", itemId, count };
+}
+
 // The recipes table keeps both skill levels null where the game data has none.
 function skillLevelsOf(yellowAt: number | null, greyAt: number | null): SkillLevels | undefined {
   return yellowAt === null || greyAt === null ? undefined : { yellowAt, greyAt };
@@ -83,8 +88,8 @@ export function createGameDataStore(db: Database): GameDataStore {
             spellId: recipe.spellId,
             name: recipe.name,
             professions: [...recipe.professions],
-            itemId: recipe.itemId,
-            itemCount: recipe.itemCount,
+            itemId: recipe.result.kind === "item" ? recipe.result.itemId : null,
+            itemCount: recipe.result.kind === "item" ? recipe.result.count : null,
             yellowAt: recipe.skillLevels?.yellowAt ?? null,
             greyAt: recipe.skillLevels?.greyAt ?? null,
             taughtBy: [...recipe.taughtBy],
@@ -152,11 +157,14 @@ export function createGameDataStore(db: Database): GameDataStore {
         .from(recipeReagents)
         .where(eq(recipeReagents.spellId, spellId))
         .orderBy(asc(recipeReagents.position));
-      const { yellowAt, greyAt, ...recipe } = found;
       return {
-        ...recipe,
-        skillLevels: skillLevelsOf(yellowAt, greyAt),
+        spellId: found.spellId,
+        name: found.name,
+        professions: found.professions,
+        result: resultOf(found.itemId, found.itemCount),
         reagents,
+        skillLevels: skillLevelsOf(found.yellowAt, found.greyAt),
+        taughtBy: found.taughtBy,
       };
     },
     searchRecipes: async (text, limit) => {

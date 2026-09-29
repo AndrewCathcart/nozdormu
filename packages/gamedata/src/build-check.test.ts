@@ -9,7 +9,13 @@ import {
 import type { GameDataStore } from "./game-data-store.ts";
 import type { ItemRecord } from "./item-sparse.ts";
 import type { RecipeRecord, RecipeTable } from "./recipes.ts";
-import { csv, itemSparseCsv, reagentHeader, recipeTablesCsv } from "./test-tables.ts";
+import {
+  csv,
+  itemSparseCsv,
+  reagentHeader,
+  recipeTablesCsv,
+  spellEffectHeader,
+} from "./test-tables.ts";
 
 const firstSword: ItemRecord = {
   id: 270_001,
@@ -24,8 +30,7 @@ const firstSwordRecipe: RecipeRecord = {
   spellId: 900_001,
   name: "Made-up Sword 1",
   professions: ["Blacksmithing"],
-  itemId: 270_001,
-  itemCount: 1,
+  result: { kind: "item", itemId: 270_001, count: 1 },
   reagents: [{ itemId: 270_500, count: 2 }],
   skillLevels: { yellowAt: 10, greyAt: 20 },
   taughtBy: [],
@@ -116,6 +121,23 @@ describe("build check", () => {
     expect(recipes?.at(-1)?.spellId).toBe(901_000);
   });
 
+  it("keeps enchants, which make no item", async () => {
+    const deps = createDeps("1.60.1.70009", "1.60.1.69893");
+    // Recipe 1 enchants instead of making item 270001.
+    const spellEffects = Array.from({ length: 1000 }, (_, index) =>
+      index === 0 ? [1, 900_001, 53, 0, 0] : [index + 1, 900_001 + index, 24, 270_001 + index, 1],
+    );
+    deps.source.table.mockImplementation(
+      fakeTables(1000, 1000, { SpellEffect: csv([spellEffectHeader, ...spellEffects]) }),
+    );
+
+    await createBuildCheckJob(deps).run();
+
+    const recipes = deps.store.replaceBuild.mock.calls[0]?.[0].recipes;
+    expect(recipes).toHaveLength(1000);
+    expect(recipes?.[0]?.result).toEqual({ kind: "enchant" });
+  });
+
   it("leaves out teaching items the build doesn't have", async () => {
     const deps = createDeps("1.60.1.70009", "1.60.1.69893");
     // Recipe 1 is taught by item 270002, one of the build's, and by item 279999, which isn't.
@@ -168,7 +190,7 @@ describe("build check", () => {
 
     await createBuildCheckJob(deps).run();
 
-    expect(deps.store.replaceBuild.mock.calls[0]?.[0].format).toBe(2);
+    expect(deps.store.replaceBuild.mock.calls[0]?.[0].format).toBe(3);
   });
 
   it("ignores a build that isn't Forever's", async () => {
