@@ -3,6 +3,7 @@
 //   pnpm job <job-name> --dry-run  prints what it would post or record, and changes nothing
 // A dry run prints the posts it would make to the terminal, never into the logs.
 import { createLogger } from "@nozdormu/core";
+import type { DungeonStore } from "@nozdormu/dungeons";
 import type { GameDataStore } from "@nozdormu/gamedata";
 import type { SeenVideoStore } from "@nozdormu/youtube";
 import { REST } from "discord.js";
@@ -54,11 +55,30 @@ function readOnlyGameData(store: GameDataStore): GameDataStore {
   };
 }
 
+function readOnlyDungeons(store: DungeonStore): DungeonStore {
+  return {
+    ...store,
+    replaceAll: (build, dungeons) => {
+      logger.info(
+        {
+          event: "dry_run.dungeons",
+          build,
+          dungeons: dungeons.length,
+          bosses: dungeons.reduce((total, dungeon) => total + dungeon.bosses.length, 0),
+        },
+        "Would replace the stored dungeons",
+      );
+      return Promise.resolve();
+    },
+  };
+}
+
 function dryRun(deps: FeatureDeps): FeatureDeps {
   return {
     ...deps,
     seenVideos: readOnlySeenVideos(deps.seenVideos),
     gameDataStore: readOnlyGameData(deps.gameDataStore),
+    dungeonStore: readOnlyDungeons(deps.dungeonStore),
     publish: (channelId, message) => {
       console.log(`\nDRY RUN: would post in channel ${channelId}:\n${message.content ?? ""}\n`);
       return Promise.resolve();

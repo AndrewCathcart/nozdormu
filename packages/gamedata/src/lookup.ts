@@ -16,10 +16,6 @@ const maxChoiceNameLength = 100;
 // Item and spell IDs are Postgres integers.
 const maxId = 2_147_483_647;
 
-export function escapeMarkdown(text: string): string {
-  return text.replaceAll(/[\\*_~`|>[\]]/g, (character) => `\\${character}`);
-}
-
 // A picked suggestion sends its ID. Anything else, including a longer number, is text to search for.
 export function parseId(value: string): number | undefined {
   const id = Number.parseInt(value, 10);

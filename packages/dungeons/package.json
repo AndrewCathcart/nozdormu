@@ -1,0 +1,16 @@
+{
+  "name": "@nozdormu/dungeons",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@nozdormu/core": "workspace:*",
+    "@nozdormu/db": "workspace:*",
+    "discord-api-types": "catalog:",
+    "drizzle-orm": "catalog:",
+    "zod": "catalog:"
+  }
+}
