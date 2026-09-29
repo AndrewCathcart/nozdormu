@@ -13,6 +13,15 @@ export interface Config {
     // The Discord channel new ScotteJaye videos are posted in.
     readonly alertChannelId: string;
   };
+  readonly anthropic: {
+    readonly apiKey: string;
+  };
+  readonly newspaper: {
+    // The channels whose chat the weekly newspaper covers.
+    readonly channelIds: readonly string[];
+    // The channel each issue is posted in.
+    readonly postChannelId: string;
+  };
 }
 
 export type ConfigResult =
@@ -25,10 +34,21 @@ function required(name: string): z.ZodString {
   return z.string({ error: missing }).min(1, { error: missing, abort: true });
 }
 
+const discordIdPattern = /^\d{17,20}$/;
+
 function discordId(name: string): z.ZodString {
-  return required(name).regex(/^\d{17,20}$/, {
+  return required(name).regex(discordIdPattern, {
     error: `${name} must be a Discord ID (17 to 20 digits).`,
   });
+}
+
+// For example "300000000000000003,300000000000000004". Spaces around each ID are ignored.
+function discordIdList(name: string) {
+  return required(name)
+    .transform((value) => value.split(",").map((id) => id.trim()))
+    .refine((ids) => ids.every((id) => discordIdPattern.test(id)), {
+      error: `${name} must be Discord IDs (17 to 20 digits) separated by commas.`,
+    });
 }
 
 function isPostgresUrl(value: string): boolean {
@@ -45,6 +65,9 @@ const envSchema = z.object({
   DISCORD_GUILD_ID: discordId("DISCORD_GUILD_ID"),
   DATABASE_URL: postgresUrl("DATABASE_URL"),
   YOUTUBE_ALERT_CHANNEL_ID: discordId("YOUTUBE_ALERT_CHANNEL_ID"),
+  ANTHROPIC_API_KEY: required("ANTHROPIC_API_KEY"),
+  NEWSPAPER_CHANNEL_IDS: discordIdList("NEWSPAPER_CHANNEL_IDS"),
+  NEWSPAPER_POST_CHANNEL_ID: discordId("NEWSPAPER_POST_CHANNEL_ID"),
 });
 
 export function loadConfig(env: Readonly<Record<string, string | undefined>>): ConfigResult {
@@ -62,6 +85,11 @@ export function loadConfig(env: Readonly<Record<string, string | undefined>>): C
       },
       database: { url: parsed.data.DATABASE_URL },
       youtube: { alertChannelId: parsed.data.YOUTUBE_ALERT_CHANNEL_ID },
+      anthropic: { apiKey: parsed.data.ANTHROPIC_API_KEY },
+      newspaper: {
+        channelIds: parsed.data.NEWSPAPER_CHANNEL_IDS,
+        postChannelId: parsed.data.NEWSPAPER_POST_CHANNEL_ID,
+      },
     },
   };
 }

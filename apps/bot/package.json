@@ -11,9 +11,11 @@
     "job": "node --env-file-if-exists=../../.env scripts/run-job.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "catalog:",
     "@nozdormu/core": "workspace:*",
     "@nozdormu/db": "workspace:*",
     "@nozdormu/gamedata": "workspace:*",
+    "@nozdormu/newspaper": "workspace:*",
     "@nozdormu/ping": "workspace:*",
     "@nozdormu/youtube": "workspace:*",
     "discord.js": "catalog:",

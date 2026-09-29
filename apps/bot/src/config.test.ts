@@ -7,6 +7,9 @@ const validEnv = {
   DISCORD_GUILD_ID: "200000000000000002",
   DATABASE_URL: "postgres://made-up-user:made-up-password@localhost:5432/nozdormu",
   YOUTUBE_ALERT_CHANNEL_ID: "300000000000000003",
+  ANTHROPIC_API_KEY: "made-up-key",
+  NEWSPAPER_CHANNEL_IDS: "300000000000000004,300000000000000005",
+  NEWSPAPER_POST_CHANNEL_ID: "300000000000000006",
 };
 
 describe("loadConfig", () => {
@@ -21,6 +24,11 @@ describe("loadConfig", () => {
         },
         database: { url: "postgres://made-up-user:made-up-password@localhost:5432/nozdormu" },
         youtube: { alertChannelId: "300000000000000003" },
+        anthropic: { apiKey: "made-up-key" },
+        newspaper: {
+          channelIds: ["300000000000000004", "300000000000000005"],
+          postChannelId: "300000000000000006",
+        },
       },
     });
   });
@@ -34,6 +42,9 @@ describe("loadConfig", () => {
           "DISCORD_GUILD_ID is missing.",
           "DATABASE_URL is missing.",
           "YOUTUBE_ALERT_CHANNEL_ID is missing.",
+          "ANTHROPIC_API_KEY is missing.",
+          "NEWSPAPER_CHANNEL_IDS is missing.",
+          "NEWSPAPER_POST_CHANNEL_ID is missing.",
         ],
       },
     );
@@ -47,6 +58,29 @@ describe("loadConfig", () => {
       problems: [
         "DISCORD_APPLICATION_ID must be a Discord ID (17 to 20 digits).",
         "DISCORD_GUILD_ID must be a Discord ID (17 to 20 digits).",
+      ],
+    });
+  });
+
+  it("reads a list of channel IDs separated by commas and spaces", () => {
+    const loaded = loadConfig({
+      ...validEnv,
+      NEWSPAPER_CHANNEL_IDS: " 300000000000000004, 300000000000000005 ",
+    });
+
+    expect(loaded.ok && loaded.config.newspaper.channelIds).toEqual([
+      "300000000000000004",
+      "300000000000000005",
+    ]);
+  });
+
+  it("names a channel list with something in it that isn't a Discord ID, without repeating it", () => {
+    expect(
+      loadConfig({ ...validEnv, NEWSPAPER_CHANNEL_IDS: "300000000000000004,general" }),
+    ).toEqual({
+      ok: false,
+      problems: [
+        "NEWSPAPER_CHANNEL_IDS must be Discord IDs (17 to 20 digits) separated by commas.",
       ],
     });
   });

@@ -1,3 +1,4 @@
+import Anthropic from "@anthropic-ai/sdk";
 import {
   type ChannelPublisher,
   createChannelPublisher,
@@ -16,6 +17,14 @@ import {
   type GameDataSource,
   type GameDataStore,
 } from "@nozdormu/gamedata";
+import {
+  type ChatReader,
+  createClaudeWriter,
+  createDiscordChatReader,
+  createNewspaperFeature,
+  type IssueWriter,
+  paper,
+} from "@nozdormu/newspaper";
 import { createPingFeature } from "@nozdormu/ping";
 import {
   createSeenVideoStore,
@@ -37,14 +46,17 @@ export interface FeatureDeps {
   readonly readFeed: FeedReader;
   readonly gameDataStore: GameDataStore;
   readonly gameDataSource: GameDataSource;
-  readonly logger: Pick<Logger, "info">;
+  readonly readChat: ChatReader;
+  readonly writeIssue: IssueWriter;
+  readonly now: () => Date;
+  readonly logger: Pick<Logger, "info" | "error">;
 }
 
 export function createFeatureDeps(
   config: Config,
   db: Database,
   rest: REST,
-  logger: Pick<Logger, "info">,
+  logger: Pick<Logger, "info" | "error">,
 ): FeatureDeps {
   return {
     config,
@@ -55,6 +67,13 @@ export function createFeatureDeps(
     readFeed: readFeedOverHttp,
     gameDataStore: createGameDataStore(db),
     gameDataSource: createWagoSource({ fetch, product: foreverProduct }),
+    readChat: createDiscordChatReader({ rest, guildId: config.discord.guildId, logger }),
+    writeIssue: createClaudeWriter({
+      client: new Anthropic({ apiKey: config.anthropic.apiKey, maxRetries: 4 }),
+      paper,
+      logger,
+    }),
+    now: () => new Date(),
   };
 }
 
@@ -73,6 +92,16 @@ export function createFeatures(deps: FeatureDeps): Feature[] {
     createGameDataFeature({
       store: deps.gameDataStore,
       source: deps.gameDataSource,
+      logger: deps.logger,
+    }),
+    createNewspaperFeature({
+      channelIds: deps.config.newspaper.channelIds,
+      postChannelId: deps.config.newspaper.postChannelId,
+      paper,
+      readChat: deps.readChat,
+      write: deps.writeIssue,
+      publish: deps.publish,
+      now: deps.now,
       logger: deps.logger,
     }),
   ];
