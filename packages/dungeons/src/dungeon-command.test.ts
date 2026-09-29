@@ -136,34 +136,19 @@ describe("/dungeon", () => {
   });
 
   it("shows damage per second, armour and other stats readably", async () => {
-    const stave: StoredLootItem = {
-      itemId: 280_103,
-      name: "Made-up Stave",
-      scanned: {
-        id: 280_103,
-        name: "Made-up Stave",
-        quality: 3,
-        itemLevel: 18,
-        requiredLevel: 13,
-        itemClass: 2,
-        itemSubclass: 10,
-        slot: "INVTYPE_2HWEAPON",
-        stats: [
-          { stat: "DAMAGE_PER_SECOND", value: 11.88 },
-          { stat: "RESISTANCE0_NAME", value: 100 },
-          { stat: "SPELL_POWER", value: 18 },
-          { stat: "ATTACK_POWER_VS_BEAST", value: 3 },
-        ],
-      },
-    };
-    const command = createDungeonCommand(
-      createFakeStore([{ ...hollow, bosses: [{ name: "Made-up Warden", loot: [stave] }] }]),
+    const stave = scannedLoot(
+      280_103,
+      "Made-up Stave",
+      { itemClass: 2, itemSubclass: 10, slot: "INVTYPE_2HWEAPON" },
+      [
+        { stat: "DAMAGE_PER_SECOND", value: 11.88 },
+        { stat: "RESISTANCE0_NAME", value: 100 },
+        { stat: "SPELL_POWER", value: 18 },
+      ],
     );
 
-    const reply = await command.handle(invoke("The Made-up Hollow"));
-
-    expect(card(reply).fields?.[0]?.value).toBe(
-      "[Made-up Stave](https://www.wowhead.com/forever/item=280103) · Two-Hand Staff · 11.9 DPS, 100 Armor, +18 Spell Power, +3 Attack Power Vs Beast",
+    expect(await lootShown([stave])).toBe(
+      "[Made-up Stave](https://www.wowhead.com/forever/item=280103) · Two-Hand Staff · 11.9 DPS, 100 Armor, +18 Spell Power",
     );
   });
 
@@ -185,6 +170,66 @@ describe("/dungeon", () => {
 
     expect(await lootShown([bracers])).toBe(
       "[Made-up Bracers](https://www.wowhead.com/forever/item=280110) · Leather Wrist · 37 Armor, +1 Str, +4 Agi, +5 Sta, +3 Int, +2 Spi, +6 Spell Power",
+    );
+  });
+
+  it("shows each resistance once, though the game names it two ways", async () => {
+    const boots = scannedLoot(
+      280_111,
+      "Made-up Boots",
+      { itemClass: 4, itemSubclass: 3, slot: "INVTYPE_FEET" },
+      [
+        { stat: "NATURE_RESISTANCE", value: 10 },
+        { stat: "RESISTANCE0_NAME", value: 43 },
+        { stat: "RESISTANCE3_NAME", value: 10 },
+      ],
+    );
+
+    expect(await lootShown([boots])).toBe(
+      "[Made-up Boots](https://www.wowhead.com/forever/item=280111) · Mail Feet · 43 Armor, +10 Nature Resistance",
+    );
+  });
+
+  it("shows crit, hit, dodge, parry, block and haste as the percentages the game's tooltip gives", async () => {
+    // The game stores these as level 60 ratings: 14 crit is 1%, as on the tooltip of Classic's
+    // Devilsaur Gauntlets, and 20 hit is 2%, as on Lionheart Helm's.
+    const ring = scannedLoot(
+      280_112,
+      "Made-up Ring",
+      { itemClass: 4, itemSubclass: 0, slot: "INVTYPE_FINGER" },
+      [
+        { stat: "CRIT_RATING", value: 14 },
+        { stat: "HIT_RATING", value: 20 },
+        { stat: "DODGE_RATING", value: 12 },
+        { stat: "PARRY_RATING", value: 21 },
+        { stat: "BLOCK_RATING", value: 25 },
+        { stat: "HASTE_RATING", value: 10 },
+      ],
+    );
+
+    expect(await lootShown([ring])).toBe(
+      "[Made-up Ring](https://www.wowhead.com/forever/item=280112) · Finger · +1% Crit, +2% Hit, +1% Dodge, +1.4% Parry, +5% Block, +1% Haste",
+    );
+  });
+
+  it("names rarer stats the way players write them", async () => {
+    const charm = scannedLoot(
+      280_113,
+      "Made-up Charm",
+      { itemClass: 4, itemSubclass: 0, slot: "INVTYPE_TRINKET" },
+      [
+        { stat: "ATTACK_POWER_VS_BEAST", value: 3 },
+        { stat: "SPELL_DAMAGE_VS_UNDEAD", value: 18 },
+        { stat: "POWER_REGEN0", value: 5 },
+        { stat: "FROST_DAMAGE_DONE", value: 20 },
+        { stat: "TWOHANDED_AXES", value: 2 },
+        { stat: "DAGGERS", value: 3 },
+        { stat: "SPELL_RESISTANCE_ALL_SCHOOLS", value: 5 },
+      ],
+    );
+
+    expect(await lootShown([charm])).toBe(
+      "[Made-up Charm](https://www.wowhead.com/forever/item=280113) · Trinket · +3 Attack Power vs Beasts, +18 Spell Damage vs Undead, +5 Mana per 5 sec, +20 Frost Spell Damage, +2 Two-Handed Axe Skill, +3 Dagger Skill, +5 All Resistances",
     );
   });
 

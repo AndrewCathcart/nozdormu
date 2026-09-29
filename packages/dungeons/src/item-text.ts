@@ -31,7 +31,7 @@ const slots: ReadonlyMap<string, string> = new Map([
 ]);
 
 // The game's item class for armour, and its subclasses for the kinds that limit who can wear it.
-const armour = 4;
+const armourClass = 4;
 const armourKinds: ReadonlyMap<number, string> = new Map([
   [1, "Cloth"],
   [2, "Leather"],
@@ -41,7 +41,7 @@ const armourKinds: ReadonlyMap<number, string> = new Map([
 
 // The game's item class for weapons, and its subclasses. Two-handed axes, maces and swords have
 // their own subclasses, but the slot already says they're two-handed.
-const weapon = 2;
+const weaponClass = 2;
 const weaponKinds: ReadonlyMap<number, string> = new Map([
   [0, "Axe"],
   [1, "Axe"],
@@ -73,14 +73,14 @@ const rangedSlots: ReadonlySet<string> = new Set([
 // Cloaks are all cloth, so the game doesn't say so, and nor does this.
 function kindText(item: ScannedItem): string | undefined {
   const slot = slots.get(item.slot);
-  if (item.itemClass === weapon) {
+  if (item.itemClass === weaponClass) {
     const kind = weaponKinds.get(item.itemSubclass);
     if (kind === undefined || slot === undefined) {
       return kind ?? slot;
     }
     return rangedSlots.has(item.slot) ? kind : `${slot} ${kind}`;
   }
-  const kind = item.itemClass === armour ? armourKinds.get(item.itemSubclass) : undefined;
+  const kind = item.itemClass === armourClass ? armourKinds.get(item.itemSubclass) : undefined;
   if (slot === undefined || kind === undefined || item.slot === "INVTYPE_CLOAK") {
     return slot;
   }
@@ -88,8 +88,8 @@ function kindText(item: ScannedItem): string | undefined {
 }
 
 // Short names players use for the main stats, and plain names for the others the game's names
-// don't spell out. Any other stat is named from the game's name ("ATTACK_POWER_VS_BEAST" becomes
-// "Attack Power Vs Beast").
+// don't spell out. Any other stat is named from the game's name ("SPELL_POWER" becomes "Spell
+// Power").
 const statNames: ReadonlyMap<string, string> = new Map([
   ["STAMINA", "Sta"],
   ["STRENGTH", "Str"],
@@ -98,11 +98,9 @@ const statNames: ReadonlyMap<string, string> = new Map([
   ["SPIRIT", "Spi"],
   ["SPELL_DAMAGE_DONE", "Spell Damage"],
   ["SPELL_HEALING_DONE", "Healing"],
-  ["CRIT_RATING", "Crit"],
-  ["HIT_RATING", "Hit"],
-  ["DODGE_RATING", "Dodge"],
   ["DEFENSE_SKILL_RATING", "Defense"],
   ["MANA_REGENERATION", "Mana per 5 sec"],
+  ["POWER_REGEN0", "Mana per 5 sec"],
   ["HEALTH_REGEN", "Health per 5 sec"],
   ["RESISTANCE1_NAME", "Holy Resistance"],
   ["RESISTANCE2_NAME", "Fire Resistance"],
@@ -110,6 +108,31 @@ const statNames: ReadonlyMap<string, string> = new Map([
   ["RESISTANCE4_NAME", "Frost Resistance"],
   ["RESISTANCE5_NAME", "Shadow Resistance"],
   ["RESISTANCE6_NAME", "Arcane Resistance"],
+  ["SPELL_RESISTANCE_ALL_SCHOOLS", "All Resistances"],
+  ["HOLY_DAMAGE_DONE", "Holy Spell Damage"],
+  ["FIRE_DAMAGE_DONE", "Fire Spell Damage"],
+  ["NATURE_DAMAGE_DONE", "Nature Spell Damage"],
+  ["FROST_DAMAGE_DONE", "Frost Spell Damage"],
+  ["SHADOW_DAMAGE_DONE", "Shadow Spell Damage"],
+  ["ARCANE_DAMAGE_DONE", "Arcane Spell Damage"],
+  ["PHYSICAL_DAMAGE_DONE", "Physical Damage"],
+  ["TWOHANDED_AXES", "Two-Handed Axe Skill"],
+  ["SWORDS", "Sword Skill"],
+  ["TWOHANDED_SWORDS", "Two-Handed Sword Skill"],
+  ["DAGGERS", "Dagger Skill"],
+  ["FIST_WEAPONS", "Fist Weapon Skill"],
+  ["POLEARMS", "Polearm Skill"],
+]);
+
+// Creature types a bonus can be against, as in "ATTACK_POWER_VS_BEAST", named as tooltips do.
+const creatureTypes: ReadonlyMap<string, string> = new Map([
+  ["BEAST", "Beasts"],
+  ["DEMON", "Demons"],
+  ["DRAGONKIN", "Dragonkin"],
+  ["ELEMENTAL", "Elementals"],
+  ["HUMANOID", "Humanoids"],
+  ["MECHANICAL", "Mechanicals"],
+  ["UNDEAD", "Undead"],
 ]);
 
 function titleCase(name: string): string {
@@ -120,19 +143,50 @@ function titleCase(name: string): string {
     .join(" ");
 }
 
-function number(value: number): string {
+// Stats the game stores as level 60 ratings, which Classic's tooltips give as percentages: 14 crit
+// rating is 1% crit, as on Devilsaur Gauntlets, and 20 hit rating is 2% hit, as on Lionheart Helm.
+const percentages: ReadonlyMap<
+  string,
+  { readonly name: string; readonly ratingPerPercent: number }
+> = new Map([
+  ["CRIT_RATING", { name: "Crit", ratingPerPercent: 14 }],
+  ["HIT_RATING", { name: "Hit", ratingPerPercent: 10 }],
+  ["DODGE_RATING", { name: "Dodge", ratingPerPercent: 12 }],
+  ["PARRY_RATING", { name: "Parry", ratingPerPercent: 15 }],
+  ["BLOCK_RATING", { name: "Block", ratingPerPercent: 5 }],
+  ["HASTE_RATING", { name: "Haste", ratingPerPercent: 10 }],
+]);
+
+// A stat's name as players write it: "Sta", "Attack Power vs Beasts", "Spell Power".
+function statName(stat: string): string {
+  const named = statNames.get(stat);
+  if (named !== undefined) {
+    return named;
+  }
+  const [bonus = stat, against] = stat.split("_VS_");
+  return against === undefined
+    ? titleCase(stat)
+    : `${titleCase(bonus)} vs ${creatureTypes.get(against) ?? titleCase(against)}`;
+}
+
+// A stat's value, with one decimal place when it isn't whole: "11.9".
+function statValue(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
 
-// A stat as a player reads it: "100 Armor", "11.9 DPS", "+4 Sta".
+// A stat as a player reads it: "100 Armor", "11.9 DPS", "+4 Sta", "+1% Crit".
 function statText({ stat, value }: ItemStat): string {
   if (stat === "RESISTANCE0_NAME") {
-    return `${number(value)} Armor`;
+    return `${statValue(value)} Armor`;
   }
   if (stat === "DAMAGE_PER_SECOND") {
-    return `${number(value)} DPS`;
+    return `${statValue(value)} DPS`;
   }
-  return `+${number(value)} ${statNames.get(stat) ?? titleCase(stat)}`;
+  const percentage = percentages.get(stat);
+  if (percentage !== undefined) {
+    return `+${statValue(value / percentage.ratingPerPercent)}% ${percentage.name}`;
+  }
+  return `+${statValue(value)} ${statName(stat)}`;
 }
 
 // The order the game's tooltip shows stats in: damage per second or armour, then the main stats.
@@ -155,9 +209,12 @@ function statRank({ stat }: ItemStat): number {
 // An item's slot, kind and stats, such as "Leather Waist · +4 Sta, +2 Spi", leaving out what it
 // doesn't have.
 export function itemDetails(item: ScannedItem): string {
-  const stats = item.stats
-    .toSorted((a, b) => statRank(a) - statRank(b))
-    .map(statText)
-    .join(", ");
+  // The game names each resistance two ways, such as "NATURE_RESISTANCE" and "RESISTANCE3_NAME",
+  // and lists both, so a stat that reads the same as one before it is left out.
+  const stats = [
+    ...new Set(
+      item.stats.toSorted((a, b) => statRank(a) - statRank(b)).map((stat) => statText(stat)),
+    ),
+  ].join(", ");
   return [kindText(item), stats].filter((part) => part !== undefined && part !== "").join(" · ");
 }

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 import { createSpyglassReader } from "./spyglass.ts";
 
 const listing =
@@ -193,6 +194,44 @@ describe("createSpyglassReader", () => {
       listing,
       `${data}/dungeons/the_made_up_hollow.json`,
     ]);
+  });
+
+  it("leaves out an item without an English name", async () => {
+    const fetch = createFakeFetch({
+      "items/items_280000.json": {
+        "280103": {
+          names: { deDE: "Erfundener Stein" },
+          quality: 0,
+          itemLevel: 1,
+          reqLevel: 0,
+          classID: 15,
+          subclassID: 0,
+          slot: "INVTYPE_NON_EQUIP_IGNORE",
+        },
+      },
+    });
+
+    const { items } = await createSpyglassReader({ fetch })();
+
+    expect(items).toEqual([]);
+  });
+
+  it("fails when an item file lists an item under something other than its ID", async () => {
+    const fetch = createFakeFetch({
+      "items/items_280000.json": {
+        "280101x": {
+          names: { enUS: "Made-up Choker" },
+          quality: 3,
+          itemLevel: 18,
+          reqLevel: 13,
+          classID: 4,
+          subclassID: 0,
+          slot: "INVTYPE_NECK",
+        },
+      },
+    });
+
+    await expect(createSpyglassReader({ fetch })()).rejects.toBeInstanceOf(z.ZodError);
   });
 
   it("fails, naming the page, when a server doesn't answer", async () => {

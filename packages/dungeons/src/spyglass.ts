@@ -82,7 +82,7 @@ const dungeonFile = z.object({
 
 // Items by ID. An item without an English name is left out.
 const itemFile = z.record(
-  z.string(),
+  z.string().regex(/^[1-9][0-9]*$/),
   z.object({
     names: z.object({ enUS: z.string().optional() }),
     quality: z.int(),

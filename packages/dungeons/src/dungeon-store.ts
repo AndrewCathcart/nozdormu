@@ -71,7 +71,7 @@ export function createDungeonStore(db: Database): DungeonStore {
   };
 
   return {
-    replaceAll: async ({ build, dungeons: synced, items }) => {
+    replaceAll: async ({ build, dungeons: syncedDungeons, items }) => {
       await db.transaction(async (tx) => {
         await tx.delete(dungeons);
         await tx.delete(scannedItems);
@@ -100,7 +100,7 @@ export function createDungeonStore(db: Database): DungeonStore {
           ),
           (batch) => tx.insert(scannedItemStats).values(batch),
         );
-        await insertInBatches(synced, (batch) =>
+        await insertInBatches(syncedDungeons, (batch) =>
           tx.insert(dungeons).values(
             batch.map((dungeon) => ({
               name: dungeon.name,
@@ -111,7 +111,7 @@ export function createDungeonStore(db: Database): DungeonStore {
             })),
           ),
         );
-        const bosses = synced.flatMap((dungeon) =>
+        const bosses = syncedDungeons.flatMap((dungeon) =>
           dungeon.bosses.map((boss, position) => ({ dungeon: dungeon.name, position, boss })),
         );
         await insertInBatches(bosses, (batch) =>
