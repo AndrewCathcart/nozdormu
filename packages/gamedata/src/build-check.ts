@@ -54,7 +54,7 @@ async function download(source: GameDataSource, version: string): Promise<GameBu
   return { version, items, recipes };
 }
 
-function tooFew(count: number, what: string, version: string): Error {
+function tooFew(count: number, what: "items" | "recipes", version: string): Error {
   return new Error(
     `wago.tools gave only ${String(count)} ${what} for build ${version}, so the stored game data was kept.`,
   );

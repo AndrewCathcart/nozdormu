@@ -2,8 +2,8 @@
 import type { AutocompleteChoice, CommandReply } from "@nozdormu/core";
 import { MessageFlags } from "discord-api-types/v10";
 
-// The private reply before the first import: "item" or "recipe" data.
-export function notLoaded(kind: string): CommandReply {
+// The private reply before the first import.
+export function notLoaded(kind: "item" | "recipe"): CommandReply {
   return {
     content: `I haven't loaded the ${kind} data yet. Try again in a minute.`,
     flags: MessageFlags.Ephemeral,

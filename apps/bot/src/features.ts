@@ -36,7 +36,7 @@ export interface FeatureDeps {
   readonly seenVideos: SeenVideoStore;
   readonly readFeed: FeedReader;
   readonly gameDataStore: GameDataStore;
-  readonly gameData: GameDataSource;
+  readonly gameDataSource: GameDataSource;
   readonly logger: Pick<Logger, "info">;
 }
 
@@ -54,7 +54,7 @@ export function createFeatureDeps(
     seenVideos: createSeenVideoStore(db),
     readFeed: readFeedOverHttp,
     gameDataStore: createGameDataStore(db),
-    gameData: createWagoSource({ fetch, product: foreverProduct }),
+    gameDataSource: createWagoSource({ fetch, product: foreverProduct }),
   };
 }
 
@@ -72,7 +72,7 @@ export function createFeatures(deps: FeatureDeps): Feature[] {
     }),
     createGameDataFeature({
       store: deps.gameDataStore,
-      source: deps.gameData,
+      source: deps.gameDataSource,
       logger: deps.logger,
     }),
   ];
