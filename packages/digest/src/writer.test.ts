@@ -54,6 +54,7 @@ const twoSections = JSON.stringify({
     { heading: "Highlights", body: "- Nothing yet." },
   ],
   scene: "A dwarf warrior proudly unrolls an enormous spreadsheet across a tavern table.",
+  caption: "The week Brannoc made a spreadsheet.",
 });
 
 function createFakeClaude(reply: Reply = { text: twoSections, stopReason: "end_turn" }) {
@@ -93,7 +94,7 @@ describe("createClaudeWriter", () => {
     );
   });
 
-  it("returns the sections Claude wrote, and the scene it described for the picture", async () => {
+  it("returns the sections Claude wrote, and the scene and caption for the picture", async () => {
     const { client } = createFakeClaude();
     const write = createClaudeWriter({ client, logger: createFakeLogger() });
 
@@ -105,6 +106,7 @@ describe("createClaudeWriter", () => {
         { heading: "Highlights", body: "- Nothing yet." },
       ],
       scene: "A dwarf warrior proudly unrolls an enormous spreadsheet across a tavern table.",
+      caption: "The week Brannoc made a spreadsheet.",
     });
   });
 

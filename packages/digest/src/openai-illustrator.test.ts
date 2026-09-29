@@ -41,7 +41,7 @@ describe("createOpenAiIllustrator", () => {
     expect(illustration).toEqual({ name: "this-week.jpg", data: new Uint8Array([1, 2, 3]) });
   });
 
-  it("asks OpenAI to paint the scene as a wide picture without writing", async () => {
+  it("asks OpenAI to draw the scene as a wide newspaper cartoon without writing", async () => {
     const deps = createDeps();
 
     await createOpenAiIllustrator(deps)(scene);
@@ -56,7 +56,7 @@ describe("createOpenAiIllustrator", () => {
     expect(typeof init?.body === "string" ? JSON.parse(init.body) : undefined).toEqual({
       model: "gpt-image-2.5-flare",
       prompt:
-        "A painted illustration for a fantasy adventuring guild's weekly newsletter, in a warm, detailed storybook style with rich colour and soft light, in a wide landscape composition. The scene: A dwarf warrior and a gnome mage cheer over a map in a crowded tavern. The picture has no text, letters, numbers, writing, logos or watermarks anywhere.",
+        "A single-panel newspaper cartoon about a fantasy adventuring guild: clean, confident ink lines, flat muted colours, expressive comic faces and poses, and a simple, uncluttered background, in the tradition of classic magazine cartoons. The scene: A dwarf warrior and a gnome mage cheer over a map in a crowded tavern. No text, letters, speech bubbles, numbers, logos or watermarks anywhere.",
       size: "1536x1024",
       quality: "medium",
       output_format: "jpeg",

@@ -20,6 +20,7 @@ const someChat = [
 const aDigest = {
   sections: [{ heading: "Decided", body: "- Brannoc has made a spreadsheet." }],
   scene: "A dwarf warrior proudly unrolls an enormous spreadsheet across a tavern table.",
+  caption: "The week Brannoc made a spreadsheet.",
 } satisfies Digest;
 
 const aPicture = {
@@ -97,7 +98,7 @@ describe("createDigestFeature", () => {
         postId,
         {
           content:
-            "# 📰 This week in the guild\n-# Monday 21 September to Monday 28 September 2026",
+            "# 📰 This week in the guild\n-# Monday 21 September to Monday 28 September 2026\n\n*The week Brannoc made a spreadsheet.*",
           allowed_mentions: { parse: [] },
           // No link previews.
           flags: 4,
@@ -130,11 +131,24 @@ describe("createDigestFeature", () => {
     await publishJob(deps).run();
 
     expect(
-      deps.publish.mock.calls.map(([, message, files]) => [message.nonce, files?.length]),
+      deps.publish.mock.calls.map(([, message, files]) => [
+        message.nonce,
+        message.content,
+        files?.length,
+      ]),
     ).toEqual([
-      ["digest-2026-09-28-0", 1],
-      ["digest-2026-09-28-0", 0],
-      ["digest-2026-09-28-1", 0],
+      [
+        "digest-2026-09-28-0",
+        "# 📰 This week in the guild\n-# Monday 21 September to Monday 28 September 2026\n\n*The week Brannoc made a spreadsheet.*",
+        1,
+      ],
+      // Without the picture, its caption goes too.
+      [
+        "digest-2026-09-28-0",
+        "# 📰 This week in the guild\n-# Monday 21 September to Monday 28 September 2026",
+        0,
+      ],
+      ["digest-2026-09-28-1", "## Decided\n- Brannoc has made a spreadsheet.", 0],
     ]);
   });
 

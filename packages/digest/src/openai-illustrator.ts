@@ -8,10 +8,11 @@ export interface OpenAiIllustratorDeps {
   readonly logger: Pick<Logger, "info">;
 }
 
-// The same style every week, around the scene Claude described. The model draws writing badly, so
-// the picture has none.
+// The same style every week, around the scene Claude described: a newspaper cartoon, which reads
+// well at Discord's preview size, where a glossy painting looked generic. The model draws writing
+// badly, so the picture has none.
 function paintingPrompt(scene: string): string {
-  return `A painted illustration for a fantasy adventuring guild's weekly newsletter, in a warm, detailed storybook style with rich colour and soft light, in a wide landscape composition. The scene: ${scene} The picture has no text, letters, numbers, writing, logos or watermarks anywhere.`;
+  return `A single-panel newspaper cartoon about a fantasy adventuring guild: clean, confident ink lines, flat muted colours, expressive comic faces and poses, and a simple, uncluttered background, in the tradition of classic magazine cartoons. The scene: ${scene} No text, letters, speech bubbles, numbers, logos or watermarks anywhere.`;
 }
 
 // OpenAI's error message can quote the prompt, which comes from members' chat, so only its code is
@@ -25,7 +26,7 @@ const drawing = z.object({
 
 const model = "gpt-image-2.5-flare";
 
-// Paints each digest's picture with OpenAI's gpt-image-2.5-flare: at medium quality, 1536 × 1024
+// Draws each digest's picture with OpenAI's gpt-image-2.5-flare: at medium quality, 1536 × 1024
 // takes about 15 seconds and costs about $0.01.
 export function createOpenAiIllustrator(deps: OpenAiIllustratorDeps): Illustrator {
   return async (scene) => {

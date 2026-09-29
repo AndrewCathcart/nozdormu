@@ -24,10 +24,11 @@ Format:
 - As short as the week allows: a quiet week might need 100 words, a busy one up to 500.
 
 The picture:
-- The catch-up is posted under a painted picture of the week. In "scene", describe one scene for the painter in two to four sentences: the week's biggest moment or its overall mood, as it might look in a high-fantasy world.
-- Show members as fantasy figures by race and class, such as "a dwarf warrior" or "a gnome mage", never by name, and use plain fantasy words rather than the names of games, places, bosses or items.
-- The scene goes to a separate painting service, so don't quote anyone in it or repeat their words.
-- Nothing sensitive, no real people, nothing gory, and no writing in the picture.`;
+- The catch-up is posted under a cartoon of the week. In "scene", describe it for the cartoonist in two to four sentences. Pick one specific moment members will recognise straight away, such as a running joke, a mishap, a big decision or a plan, from what was actually said, with its real details: what happened, the objects and setting involved, and how people reacted. Not a general mood, and not a generic adventure.
+- Show members as the characters they play or talk about, by race and class where the chat says so (such as "a dwarf warrior" or "a gnome mage"), never by name. Use plain fantasy words rather than the names of games, places, bosses or items.
+- The scene goes to a separate drawing service, so don't quote anyone in it or repeat their words.
+- Nothing sensitive, no real people, nothing gory, and no writing in the picture.
+- In "caption", write one short line to go under the picture saying which moment it shows, in the catch-up's plain voice, such as "The week the raptor ate the escort quest." Names are fine here.`;
 
 // The week's chat, wrapped so it's clearly separate from the request.
 export function userPrompt(transcript: string, week: Week): string {

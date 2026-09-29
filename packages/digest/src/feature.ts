@@ -1,6 +1,7 @@
 import {
   type ChannelMessage,
   type ChannelPublisher,
+  escapeMarkdown,
   type Feature,
   latestWeeklyTime,
   type Logger,
@@ -65,9 +66,21 @@ export function createDigestFeature(deps: DigestFeatureDeps): Feature {
 
   // The masthead goes again without the picture if Discord won't take it (without Attach Files, say).
   // It carries the same nonce, so if the first try did get through, Discord doesn't post it twice.
-  const postWithPicture = async (message: ChannelMessage, picture: Illustration): Promise<void> => {
+  // With the picture, the masthead also carries its caption, which shows above it.
+  const postWithPicture = async (
+    message: ChannelMessage,
+    picture: Illustration,
+    caption: string,
+  ): Promise<void> => {
+    const captioned =
+      caption.trim() === ""
+        ? message
+        : {
+            ...message,
+            content: `${message.content ?? ""}\n\n*${escapeMarkdown(caption.trim())}*`,
+          };
     try {
-      await deps.publish(deps.postChannelId, message, [picture]);
+      await deps.publish(deps.postChannelId, captioned, [picture]);
     } catch (error) {
       deps.logger.error(
         { event: "digest.picture_post_failed", err: error },
@@ -110,7 +123,7 @@ export function createDigestFeature(deps: DigestFeatureDeps): Feature {
         enforce_nonce: true,
       } satisfies ChannelMessage;
       if (index === 0 && picture !== undefined) {
-        await postWithPicture(message, picture);
+        await postWithPicture(message, picture, digest.caption);
       } else {
         await deps.publish(deps.postChannelId, message, []);
       }

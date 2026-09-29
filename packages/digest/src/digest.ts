@@ -12,6 +12,8 @@ export interface Digest {
   readonly sections: readonly Section[];
   // One scene from the week, described for a painter, without members' names or words.
   readonly scene: string;
+  // A line under the picture saying which moment it shows. Names are fine here.
+  readonly caption: string;
 }
 
 // Writes the week's digest from its chat.
