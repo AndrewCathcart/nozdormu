@@ -31,7 +31,6 @@ function describeRecipe(recipe: RecipeRecord, itemNames: ReadonlyMap<number, str
       ? [`Taught by ${recipe.taughtBy.map(itemName).join(" or ")}`]
       : []),
     wowheadLink(recipe),
-    "-# Recipe data from wago.tools",
   ].join("\n");
 }
 
