@@ -2,9 +2,15 @@ import type { CommandReply, SlashCommand } from "@nozdormu/core";
 import { ApplicationCommandOptionType } from "discord-api-types/v10";
 import type { GameDataStore } from "./game-data-store.ts";
 import { escapeMarkdown } from "./lookup.ts";
-import { type Amount, listMaterials, type Materials } from "./materials.ts";
-import { findRecipe, recipeNotFound, suggestRecipes } from "./recipe-lookup.ts";
-import type { RecipeRecord } from "./recipes.ts";
+import { listMaterials, type Materials } from "./materials.ts";
+import {
+  findRecipe,
+  itemNamer,
+  recipeNotFound,
+  suggestRecipes,
+  wowheadLink,
+} from "./recipe-lookup.ts";
+import type { Reagent, RecipeRecord } from "./recipes.ts";
 
 const maxTimes = 100;
 
@@ -14,9 +20,8 @@ function describeMaterials(
   materials: Materials,
   itemNames: ReadonlyMap<number, string>,
 ): string {
-  const itemName = (id: number): string =>
-    escapeMarkdown(itemNames.get(id) ?? `item ${String(id)}`);
-  const lines = (amounts: readonly Amount[]): string[] =>
+  const itemName = itemNamer(itemNames);
+  const lines = (amounts: readonly Reagent[]): string[] =>
     amounts.map(({ itemId, count }) => `- ${String(count)} × ${itemName(itemId)}`);
   const goal =
     recipe.result.kind === "item"
@@ -29,9 +34,7 @@ function describeMaterials(
     ...(materials.made.length > 0
       ? ["Made along the way, in order:", ...lines(materials.made)]
       : []),
-    recipe.result.kind === "item"
-      ? `https://www.wowhead.com/forever/item=${String(recipe.result.itemId)}`
-      : `https://www.wowhead.com/forever/spell=${String(recipe.spellId)}`,
+    wowheadLink(recipe),
     "-# Recipe data from wago.tools. Transmutes and leather grade-ups aren't broken down.",
   ].join("\n");
 }
@@ -72,8 +75,15 @@ export function createMatsCommand(
       if (recipe === undefined) {
         return recipeNotFound(store);
       }
+      // Discord enforces the option's limits; anything else counts as once.
       const timesValue = invocation.options.get("times");
-      const times = typeof timesValue === "number" ? timesValue : 1;
+      const times =
+        typeof timesValue === "number" &&
+        Number.isInteger(timesValue) &&
+        timesValue >= 1 &&
+        timesValue <= maxTimes
+          ? timesValue
+          : 1;
       const materials = await listMaterials(recipe, times, store);
       const itemNames = await store.itemNames([
         ...(recipe.result.kind === "item" ? [recipe.result.itemId] : []),

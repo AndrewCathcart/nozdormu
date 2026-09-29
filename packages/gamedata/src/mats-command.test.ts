@@ -268,10 +268,21 @@ describe("/mats", () => {
     ]);
   });
 
+  it("crafts it once when given a number of times Discord shouldn't allow", async () => {
+    const command = createMatsCommand(createFakeStore([makeGizmo, makeTube, smeltBar]));
+
+    const reply = await command.handle(invoke(String(makeGizmo.spellId), 1000));
+
+    expect(reply.content?.split("\n")[0]).toBe("**Mats for 1 × Made-up Gizmo** · Engineering");
+  });
+
   it("crafts a recipe that makes several at once only as often as the whole list needs", async () => {
     // Both the gizmo and each tube need a bar, and one smelt makes 5 bars: 3 tubes and the gizmo
     // need 4, so one smelt will do.
-    const makeFiveBars = { ...smeltBar, result: { kind: "item", itemId: bar, count: 5 } } as const;
+    const makeFiveBars: RecipeRecord = {
+      ...smeltBar,
+      result: { kind: "item", itemId: bar, count: 5 },
+    };
     const tubeFromOneBar = { ...makeTube, reagents: [{ itemId: bar, count: 1 }] };
     const gizmoFromTubes = {
       ...makeGizmo,

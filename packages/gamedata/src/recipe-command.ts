@@ -2,12 +2,17 @@ import type { CommandReply, SlashCommand } from "@nozdormu/core";
 import { ApplicationCommandOptionType } from "discord-api-types/v10";
 import type { GameDataStore } from "./game-data-store.ts";
 import { escapeMarkdown } from "./lookup.ts";
-import { findRecipe, recipeNotFound, suggestRecipes } from "./recipe-lookup.ts";
+import {
+  findRecipe,
+  itemNamer,
+  recipeNotFound,
+  suggestRecipes,
+  wowheadLink,
+} from "./recipe-lookup.ts";
 import type { RecipeRecord } from "./recipes.ts";
 
 function describeRecipe(recipe: RecipeRecord, itemNames: ReadonlyMap<number, string>): string {
-  const itemName = (id: number): string =>
-    escapeMarkdown(itemNames.get(id) ?? `item ${String(id)}`);
+  const itemName = itemNamer(itemNames);
   return [
     `**${escapeMarkdown(recipe.name)}** · ${recipe.professions.join(" or ")}`,
     ...(recipe.result.kind === "item"
@@ -26,10 +31,7 @@ function describeRecipe(recipe: RecipeRecord, itemNames: ReadonlyMap<number, str
     ...(recipe.taughtBy.length > 0
       ? [`Taught by ${recipe.taughtBy.map(itemName).join(" or ")}`]
       : []),
-    // An item's page shows its tooltip and sources; an enchant has only its spell's page.
-    recipe.result.kind === "item"
-      ? `https://www.wowhead.com/forever/item=${String(recipe.result.itemId)}`
-      : `https://www.wowhead.com/forever/spell=${String(recipe.spellId)}`,
+    wowheadLink(recipe),
     "-# Recipe data from wago.tools",
   ].join("\n");
 }

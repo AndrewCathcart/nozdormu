@@ -1,8 +1,8 @@
-// Finding a recipe from what someone typed or picked, shared by /recipe and /mats.
+// Finding and showing recipes, shared by /recipe and /mats.
 import { type AutocompleteChoice, type CommandReply, maxAutocompleteChoices } from "@nozdormu/core";
 import { MessageFlags } from "discord-api-types/v10";
 import type { GameDataStore } from "./game-data-store.ts";
-import { notLoaded, parseId, toChoices } from "./lookup.ts";
+import { escapeMarkdown, notLoaded, parseId, toChoices } from "./lookup.ts";
 import type { RecipeRecord } from "./recipes.ts";
 
 type RecipeLookupStore = Pick<GameDataStore, "importedBuild" | "getRecipe" | "searchRecipes">;
@@ -33,6 +33,18 @@ export async function recipeNotFound(store: RecipeLookupStore): Promise<CommandR
           "I couldn't find that recipe. Start typing its name and pick one of the suggestions.",
         flags: MessageFlags.Ephemeral,
       };
+}
+
+// An item's name for a reply, from names looked up in the store, or its ID if it has none.
+export function itemNamer(itemNames: ReadonlyMap<number, string>): (itemId: number) => string {
+  return (itemId) => escapeMarkdown(itemNames.get(itemId) ?? `item ${String(itemId)}`);
+}
+
+// An item's page shows its tooltip and sources; an enchant has only its spell's page.
+export function wowheadLink(recipe: RecipeRecord): string {
+  return recipe.result.kind === "item"
+    ? `https://www.wowhead.com/forever/item=${String(recipe.result.itemId)}`
+    : `https://www.wowhead.com/forever/spell=${String(recipe.spellId)}`;
 }
 
 // Recipes whose name, or whose item's name, contains the text, labelled with their profession and

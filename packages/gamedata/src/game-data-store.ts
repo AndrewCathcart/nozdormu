@@ -38,7 +38,7 @@ export interface GameDataStore {
   // The names of those of these items that exist, by ID.
   readonly itemNames: (ids: readonly number[]) => Promise<Map<number, string>>;
   readonly getRecipe: (spellId: number) => Promise<RecipeRecord | undefined>;
-  // The recipes that make any of these items, by spell ID.
+  // The recipes that make any of these items, in spell ID order.
   readonly recipesMaking: (itemIds: readonly number[]) => Promise<RecipeRecord[]>;
   // Recipes whose name, or whose item's name, contains the text: names starting with it first,
   // then shorter names.
@@ -211,7 +211,11 @@ export function createGameDataStore(db: Database): GameDataStore {
         return [];
       }
       const reagents = await db
-        .select()
+        .select({
+          spellId: recipeReagents.spellId,
+          itemId: recipeReagents.itemId,
+          count: recipeReagents.count,
+        })
         .from(recipeReagents)
         .where(
           inArray(

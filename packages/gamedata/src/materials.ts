@@ -1,16 +1,11 @@
 import type { GameDataStore } from "./game-data-store.ts";
-import type { RecipeRecord } from "./recipes.ts";
-
-export interface Amount {
-  readonly itemId: number;
-  readonly count: number;
-}
+import type { Reagent, RecipeRecord } from "./recipes.ts";
 
 export interface Materials {
   // What to gather or buy, in the order the recipe first needs it.
-  readonly raw: readonly Amount[];
+  readonly raw: readonly Reagent[];
   // What to craft on the way, each before anything that needs it, with how many it makes.
-  readonly made: readonly Amount[];
+  readonly made: readonly Reagent[];
 }
 
 interface Craft {
@@ -65,11 +60,12 @@ async function recipesToBreakDown(
 
 // Walks the breakdown depth first: the crafts in an order that makes each before anything that
 // needs it, and every item in the order the recipe first needs it. An item whose breakdown would
-// need itself isn't broken down: it's dropped from the chosen recipes and the walk starts again.
+// need itself isn't broken down: its recipe is set aside and the walk starts again.
 function walk(
   root: RecipeRecord,
-  chosen: Map<number, RecipeRecord>,
+  recipes: ReadonlyMap<number, RecipeRecord>,
 ): { crafts: Craft[]; seen: number[] } {
+  const chosen = new Map(recipes);
   for (;;) {
     const crafts: Craft[] = [];
     const seen: number[] = [];
@@ -120,7 +116,7 @@ export async function listMaterials(
     }
   };
   need(root, times);
-  const made: Amount[] = [];
+  const made: Reagent[] = [];
   // Everything that needs a craft comes after it in the walk, so going backwards counts all of it.
   for (const { itemId, recipe } of crafts.toReversed()) {
     const perCraft = recipe.result.kind === "item" ? recipe.result.count : 1;
@@ -130,7 +126,7 @@ export async function listMaterials(
   }
   return {
     raw: seen
-      .filter((itemId) => !chosen.has(itemId))
+      .filter((itemId) => !crafts.some((craft) => craft.itemId === itemId))
       .map((itemId) => ({ itemId, count: needed.get(itemId) ?? 0 })),
     made,
   };
