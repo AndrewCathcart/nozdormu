@@ -73,7 +73,7 @@ export function createYouTubeFeature(deps: YouTubeFeatureDeps): Feature {
       }
       try {
         await deps.publish(deps.alertChannelId, {
-          content: `${scotteJaye.name} just posted a new video!\n${video.url}`,
+          content: `🚨 NEW ${scotteJaye.name.toUpperCase()} VIDEO 🚨\n${video.url}`,
           allowed_mentions: { parse: [] },
           nonce: `yt-${video.id}`,
           enforce_nonce: true,
