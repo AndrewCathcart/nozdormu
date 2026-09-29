@@ -20,7 +20,7 @@ jobs:
     # Tests use real Postgres on port 5433, like the local DBngin "nozdormu" server.
     services:
       postgres:
-        image: postgres:18.4
+        image: postgres:17.6
         env:
           POSTGRES_HOST_AUTH_METHOD: trust
         ports:
