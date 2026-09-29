@@ -1,6 +1,6 @@
 {
-  "id": "cb73baec-f0ed-4e48-b9f2-5189eb3b0a8c",
-  "prevId": "756997f4-f7a1-422e-aa89-b77db3590de8",
+  "id": "84e2e243-ae24-4e28-800f-fac22a871240",
+  "prevId": "7ea6296b-981d-46cc-9c24-ac8c9d1da14f",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -71,6 +71,32 @@
           ]
         }
       },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.calendar_reminders": {
+      "name": "calendar_reminders",
+      "schema": "",
+      "columns": {
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "posted_at": {
+          "name": "posted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
@@ -313,6 +339,163 @@
           "columns": [
             "dungeon",
             "boss_position",
+            "position"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.dungeon_quest_rewards": {
+      "name": "dungeon_quest_rewards",
+      "schema": "",
+      "columns": {
+        "dungeon": {
+          "name": "dungeon",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "quest_position": {
+          "name": "quest_position",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "position": {
+          "name": "position",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "item_id": {
+          "name": "item_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "item_name": {
+          "name": "item_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "dungeon_quest_rewards_dungeon_quest_position_dungeon_quests_dungeon_position_fk": {
+          "name": "dungeon_quest_rewards_dungeon_quest_position_dungeon_quests_dungeon_position_fk",
+          "tableFrom": "dungeon_quest_rewards",
+          "tableTo": "dungeon_quests",
+          "columnsFrom": [
+            "dungeon",
+            "quest_position"
+          ],
+          "columnsTo": [
+            "dungeon",
+            "position"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "dungeon_quest_rewards_dungeon_quest_position_position_pk": {
+          "name": "dungeon_quest_rewards_dungeon_quest_position_position_pk",
+          "columns": [
+            "dungeon",
+            "quest_position",
+            "position"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.dungeon_quests": {
+      "name": "dungeon_quests",
+      "schema": "",
+      "columns": {
+        "dungeon": {
+          "name": "dungeon",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "position": {
+          "name": "position",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "quest_id": {
+          "name": "quest_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "side": {
+          "name": "side",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "class_name": {
+          "name": "class_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "required_level": {
+          "name": "required_level",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "xp": {
+          "name": "xp",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "objective": {
+          "name": "objective",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "dungeon_quests_dungeon_dungeons_name_fk": {
+          "name": "dungeon_quests_dungeon_dungeons_name_fk",
+          "tableFrom": "dungeon_quests",
+          "tableTo": "dungeons",
+          "columnsFrom": [
+            "dungeon"
+          ],
+          "columnsTo": [
+            "name"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "dungeon_quests_dungeon_position_pk": {
+          "name": "dungeon_quests_dungeon_position_pk",
+          "columns": [
+            "dungeon",
             "position"
           ]
         }

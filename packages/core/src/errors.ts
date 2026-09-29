@@ -5,6 +5,8 @@ export interface SerializedError {
   readonly status?: number;
   readonly code?: number | string;
   readonly cause?: SerializedError;
+  // The errors an AggregateError gathers, such as a job's failed posts.
+  readonly errors?: readonly SerializedError[];
 }
 
 // Drizzle's failed-query errors put the query's parameter values, which can be message content,
@@ -47,6 +49,9 @@ function serialize(error: unknown, seen: WeakSet<Error>): SerializedError {
       ? { code: error.code }
       : {}),
     ...(error.cause === undefined ? {} : { cause: serialize(error.cause, seen) }),
+    ...(error instanceof AggregateError
+      ? { errors: error.errors.map((inner: unknown) => serialize(inner, seen)) }
+      : {}),
   };
 }
 

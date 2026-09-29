@@ -26,6 +26,10 @@ export interface Config {
     // The channel each digest is posted in.
     readonly postChannelId: string;
   };
+  readonly foreverNews: {
+    // The Discord channel Forever news is posted in, such as Blizzard staff forum posts.
+    readonly channelId: string;
+  };
 }
 
 export type ConfigResult =
@@ -73,6 +77,7 @@ const envSchema = z.object({
   OPENAI_API_KEY: required("OPENAI_API_KEY"),
   DIGEST_CHANNEL_IDS: discordIdList("DIGEST_CHANNEL_IDS"),
   DIGEST_POST_CHANNEL_ID: discordId("DIGEST_POST_CHANNEL_ID"),
+  FOREVER_NEWS_CHANNEL_ID: discordId("FOREVER_NEWS_CHANNEL_ID"),
 });
 
 export function loadConfig(env: Readonly<Record<string, string | undefined>>): ConfigResult {
@@ -96,6 +101,7 @@ export function loadConfig(env: Readonly<Record<string, string | undefined>>): C
         channelIds: parsed.data.DIGEST_CHANNEL_IDS,
         postChannelId: parsed.data.DIGEST_POST_CHANNEL_ID,
       },
+      foreverNews: { channelId: parsed.data.FOREVER_NEWS_CHANNEL_ID },
     },
   };
 }

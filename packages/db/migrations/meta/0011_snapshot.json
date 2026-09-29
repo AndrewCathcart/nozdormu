@@ -1,6 +1,6 @@
 {
-  "id": "cb73baec-f0ed-4e48-b9f2-5189eb3b0a8c",
-  "prevId": "756997f4-f7a1-422e-aa89-b77db3590de8",
+  "id": "7ea6296b-981d-46cc-9c24-ac8c9d1da14f",
+  "prevId": "cb73baec-f0ed-4e48-b9f2-5189eb3b0a8c",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -71,6 +71,32 @@
           ]
         }
       },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.calendar_reminders": {
+      "name": "calendar_reminders",
+      "schema": "",
+      "columns": {
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "posted_at": {
+          "name": "posted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},

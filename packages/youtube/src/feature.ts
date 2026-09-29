@@ -67,7 +67,7 @@ export function createYouTubeFeature(deps: YouTubeFeatureDeps): Feature {
     const alreadyPosted = await deps.recentPosts(deps.alertChannelId);
     const failures: unknown[] = [];
     for (const video of fresh) {
-      if (alreadyPosted.some((content) => content.includes(video.url))) {
+      if (alreadyPosted.some((post) => post.content.includes(video.url))) {
         await deps.seenVideos.markSeen(channelId, [video]);
         continue;
       }

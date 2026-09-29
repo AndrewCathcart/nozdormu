@@ -11,6 +11,7 @@ const validEnv = {
   OPENAI_API_KEY: "made-up-openai-key",
   DIGEST_CHANNEL_IDS: "300000000000000004,300000000000000005",
   DIGEST_POST_CHANNEL_ID: "300000000000000006",
+  FOREVER_NEWS_CHANNEL_ID: "300000000000000007",
 };
 
 describe("loadConfig", () => {
@@ -31,6 +32,7 @@ describe("loadConfig", () => {
           channelIds: ["300000000000000004", "300000000000000005"],
           postChannelId: "300000000000000006",
         },
+        foreverNews: { channelId: "300000000000000007" },
       },
     });
   });
@@ -48,6 +50,7 @@ describe("loadConfig", () => {
           "OPENAI_API_KEY is missing.",
           "DIGEST_CHANNEL_IDS is missing.",
           "DIGEST_POST_CHANNEL_ID is missing.",
+          "FOREVER_NEWS_CHANNEL_ID is missing.",
         ],
       },
     );

@@ -131,7 +131,10 @@ describe("YouTube alert", () => {
   it("doesn't repost a video its recent messages already link to, and records it", async () => {
     const deps = createDeps([videoC, videoB], { seen: [videoB] });
     deps.recentPosts.mockResolvedValue([
-      "🚨 NEW SCOTTEJAYE VIDEO 🚨\nhttps://www.youtube.com/watch?v=ccccccccccc",
+      {
+        content: "🚨 NEW SCOTTEJAYE VIDEO 🚨\nhttps://www.youtube.com/watch?v=ccccccccccc",
+        embedUrls: [],
+      },
     ]);
 
     await pollJob(deps).run();

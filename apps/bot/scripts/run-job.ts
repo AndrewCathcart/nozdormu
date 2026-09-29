@@ -6,7 +6,9 @@
 import { writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createLogger } from "@nozdormu/core";
+import type { SeenPostStore } from "@nozdormu/blueposts";
+import type { PostedReminderStore } from "@nozdormu/calendar";
+import { type ChannelMessage, createLogger } from "@nozdormu/core";
 import type { DungeonStore } from "@nozdormu/dungeons";
 import type { GameDataStore } from "@nozdormu/gamedata";
 import type { SeenVideoStore } from "@nozdormu/youtube";
@@ -59,6 +61,34 @@ function readOnlyGameData(store: GameDataStore): GameDataStore {
   };
 }
 
+function readOnlySeenStaffPosts(store: SeenPostStore): SeenPostStore {
+  return {
+    history: store.history,
+    seenIds: store.seenIds,
+    recordFirstCheck: (feed, posts) => {
+      logger.info(
+        { event: "dry_run.first_check", feed, posts: posts.length },
+        "Would record the first check",
+      );
+      return Promise.resolve();
+    },
+    markSeen: (feed, postIds) => {
+      logger.info({ event: "dry_run.mark_seen", feed, postIds }, "Would mark as seen");
+      return Promise.resolve();
+    },
+  };
+}
+
+// A message's text, then each card's author, title, link, description and footer, one per line.
+function asText(message: ChannelMessage): string {
+  const cards = (message.embeds ?? []).map((embed) =>
+    [embed.author?.name, embed.title, embed.url, embed.description, embed.footer?.text]
+      .filter((line) => line !== undefined)
+      .join("\n"),
+  );
+  return [message.content ?? "", ...cards].filter((part) => part !== "").join("\n\n");
+}
+
 function readOnlyDungeons(store: DungeonStore): DungeonStore {
   return {
     ...store,
@@ -72,14 +102,26 @@ function readOnlyDungeons(store: DungeonStore): DungeonStore {
   };
 }
 
+function readOnlyPostedReminders(store: PostedReminderStore): PostedReminderStore {
+  return {
+    postedKeys: store.postedKeys,
+    markPosted: (key) => {
+      logger.info({ event: "dry_run.reminder", key }, "Would record the reminder as posted");
+      return Promise.resolve();
+    },
+  };
+}
+
 function dryRun(deps: FeatureDeps): FeatureDeps {
   return {
     ...deps,
     seenVideos: readOnlySeenVideos(deps.seenVideos),
     gameDataStore: readOnlyGameData(deps.gameDataStore),
+    seenStaffPosts: readOnlySeenStaffPosts(deps.seenStaffPosts),
     dungeonStore: readOnlyDungeons(deps.dungeonStore),
+    postedReminders: readOnlyPostedReminders(deps.postedReminders),
     publish: (channelId, message, files = []) => {
-      console.log(`\nDRY RUN: would post in channel ${channelId}:\n${message.content ?? ""}\n`);
+      console.log(`\nDRY RUN: would post in channel ${channelId}:\n${asText(message)}\n`);
       for (const { name, data } of files) {
         const path = join(tmpdir(), `nozdormu-dry-run-${name}`);
         writeFileSync(
