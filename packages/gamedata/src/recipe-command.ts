@@ -1,20 +1,18 @@
-import { type CommandReply, maxAutocompleteChoices, type SlashCommand } from "@nozdormu/core";
-import { ApplicationCommandOptionType, MessageFlags } from "discord-api-types/v10";
+import type { CommandReply, SlashCommand } from "@nozdormu/core";
+import { ApplicationCommandOptionType } from "discord-api-types/v10";
 import type { GameDataStore } from "./game-data-store.ts";
-import { escapeMarkdown, notLoaded, parseId, toChoices } from "./lookup.ts";
+import { escapeMarkdown } from "./lookup.ts";
+import {
+  findRecipe,
+  itemNamer,
+  recipeNotFound,
+  suggestRecipes,
+  wowheadLink,
+} from "./recipe-lookup.ts";
 import type { RecipeRecord } from "./recipes.ts";
 
-// Builds imported before recipes were (import format 1) have none until the next build check.
-const firstFormatWithRecipes = 2;
-
-const notFound: CommandReply = {
-  content: "I couldn't find that recipe. Start typing its name and pick one of the suggestions.",
-  flags: MessageFlags.Ephemeral,
-};
-
 function describeRecipe(recipe: RecipeRecord, itemNames: ReadonlyMap<number, string>): string {
-  const itemName = (id: number): string =>
-    escapeMarkdown(itemNames.get(id) ?? `item ${String(id)}`);
+  const itemName = itemNamer(itemNames);
   return [
     `**${escapeMarkdown(recipe.name)}** · ${recipe.professions.join(" or ")}`,
     ...(recipe.result.kind === "item"
@@ -33,10 +31,7 @@ function describeRecipe(recipe: RecipeRecord, itemNames: ReadonlyMap<number, str
     ...(recipe.taughtBy.length > 0
       ? [`Taught by ${recipe.taughtBy.map(itemName).join(" or ")}`]
       : []),
-    // An item's page shows its tooltip and sources; an enchant has only its spell's page.
-    recipe.result.kind === "item"
-      ? `https://www.wowhead.com/forever/item=${String(recipe.result.itemId)}`
-      : `https://www.wowhead.com/forever/spell=${String(recipe.spellId)}`,
+    wowheadLink(recipe),
     "-# Recipe data from wago.tools",
   ].join("\n");
 }
@@ -46,15 +41,6 @@ function describeRecipe(recipe: RecipeRecord, itemNames: ReadonlyMap<number, str
 export function createRecipeCommand(
   store: Pick<GameDataStore, "importedBuild" | "getRecipe" | "searchRecipes" | "itemNames">,
 ): SlashCommand {
-  const find = async (value: string): Promise<RecipeRecord | undefined> => {
-    const id = parseId(value);
-    if (id !== undefined) {
-      return store.getRecipe(id);
-    }
-    const [best] = await store.searchRecipes(value, 1);
-    return best === undefined ? undefined : store.getRecipe(best.spellId);
-  };
-
   return {
     definition: {
       name: "recipe",
@@ -72,12 +58,9 @@ export function createRecipeCommand(
     handle: async (invocation): Promise<CommandReply> => {
       const value = invocation.options.get("name");
       const text = typeof value === "string" ? value.trim() : "";
-      const recipe = text === "" ? undefined : await find(text);
+      const recipe = text === "" ? undefined : await findRecipe(store, text);
       if (recipe === undefined) {
-        const imported = await store.importedBuild();
-        return imported === undefined || imported.format < firstFormatWithRecipes
-          ? notLoaded("recipe")
-          : notFound;
+        return recipeNotFound(store);
       }
       const itemNames = await store.itemNames([
         ...(recipe.result.kind === "item" ? [recipe.result.itemId] : []),
@@ -86,23 +69,6 @@ export function createRecipeCommand(
       ]);
       return { content: describeRecipe(recipe, itemNames), allowed_mentions: { parse: [] } };
     },
-    autocomplete: async (query) => {
-      const text = query.value.trim();
-      if (text === "") {
-        return [];
-      }
-      const found = await store.searchRecipes(text, maxAutocompleteChoices);
-      return toChoices(
-        found.map((recipe) => ({
-          name: recipe.name,
-          label:
-            recipe.professions.join(" or ") +
-            (recipe.skillLevels === undefined
-              ? ""
-              : `, yellow at ${String(recipe.skillLevels.yellowAt)}`),
-          value: String(recipe.spellId),
-        })),
-      );
-    },
+    autocomplete: (query) => suggestRecipes(store, query.value),
   };
 }
