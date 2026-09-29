@@ -22,8 +22,9 @@ export async function registerGuildCommands(
   });
 }
 
-// Sends every slash command to the registry and replies with whatever it returns, and answers
-// autocomplete requests with the registry's suggestions.
+// Sends every slash command to the registry and replies with whatever it returns, answers
+// autocomplete requests with the registry's suggestions, and answers button presses by updating
+// the message the button is on, or with a new reply.
 export function routeInteractions(
   client: Client,
   rest: REST,
@@ -48,6 +49,35 @@ export function routeInteractions(
             { event: "autocomplete.reply_failed", commandName, err: error },
             "Couldn't send suggestions",
           );
+        });
+      return;
+    }
+    if (interaction.isButton()) {
+      const { customId, id, token } = interaction;
+      const startedAt = performance.now();
+      registry
+        .press({ customId })
+        .then(async (result) => {
+          const body = {
+            type:
+              result.response.kind === "update"
+                ? InteractionResponseType.UpdateMessage
+                : InteractionResponseType.ChannelMessageWithSource,
+            data: result.response.message,
+          } satisfies RESTPostAPIInteractionCallbackJSONBody;
+          await rest.post(Routes.interactionCallback(id, token), { body, auth: false });
+          logger.info(
+            {
+              event: "button.handled",
+              commandName: result.commandName,
+              outcome: result.kind,
+              durationMs: Math.round(performance.now() - startedAt),
+            },
+            "Button press handled",
+          );
+        })
+        .catch((error: unknown) => {
+          logger.error({ event: "button.reply_failed", err: error }, "Couldn't answer a button");
         });
       return;
     }

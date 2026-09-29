@@ -62,6 +62,16 @@ const switcher: Feature = {
   ],
 };
 
+const brokenSwitch: Feature = {
+  commands: [
+    {
+      definition: { name: "fuse", description: "Always blows." },
+      handle: () => Promise.resolve({ content: "Intact" }),
+      press: () => Promise.reject(new Error("Pop")),
+    },
+  ],
+};
+
 function createFakeLogger() {
   return { warn: vi.fn<LogFn>(), error: vi.fn<LogFn>() } satisfies Pick<Logger, "warn" | "error">;
 }
@@ -283,6 +293,34 @@ describe("createRegistry", () => {
     expect(logger.warn).toHaveBeenCalledExactlyOnceWith(
       { event: "button.unknown", commandName: "retired" },
       "Button press for no command",
+    );
+  });
+
+  it("turns a press handler that throws into a private error reply", async () => {
+    const registry = createRegistry([brokenSwitch], createFakeLogger());
+
+    expect(await registry.press({ customId: "fuse:on" })).toEqual({
+      kind: "failed",
+      commandName: "fuse",
+      response: {
+        kind: "reply",
+        message: {
+          content: "Something went wrong. It's been logged.",
+          flags: MessageFlags.Ephemeral,
+        },
+      },
+    });
+  });
+
+  it("logs a press handler that throws, with its error", async () => {
+    const logger = createFakeLogger();
+    const registry = createRegistry([brokenSwitch], logger);
+
+    await registry.press({ customId: "fuse:on" });
+
+    expect(logger.error).toHaveBeenCalledExactlyOnceWith(
+      { event: "button.failed", commandName: "fuse", err: new Error("Pop") },
+      "Button press failed",
     );
   });
 });

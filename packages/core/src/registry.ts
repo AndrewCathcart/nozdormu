@@ -87,7 +87,12 @@ export function createRegistry(
         logger.warn({ event: "button.unknown", commandName }, "Button press for no command");
         return { kind: "unknown-button", commandName, response: unknownButtonResponse };
       }
-      return { kind: "handled", commandName, response: await press(buttonPress) };
+      try {
+        return { kind: "handled", commandName, response: await press(buttonPress) };
+      } catch (error) {
+        logger.error({ event: "button.failed", commandName, err: error }, "Button press failed");
+        return { kind: "failed", commandName, response: { kind: "reply", message: failedReply } };
+      }
     },
     dispatch: async (invocation) => {
       const command = commandsByName.get(invocation.commandName);
