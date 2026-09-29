@@ -27,6 +27,18 @@ export interface StoredQuest extends Omit<Quest, "rewards"> {
   readonly rewards: readonly StoredLootItem[];
 }
 
+// Whether Spyglass has scanned nothing of the quest but its ID and name.
+export function isKnownOnlyByName(quest: StoredQuest): boolean {
+  return (
+    quest.side === undefined &&
+    quest.className === undefined &&
+    quest.requiredLevel === undefined &&
+    quest.xp === undefined &&
+    quest.objective === undefined &&
+    quest.rewards.length === 0
+  );
+}
+
 export interface StoredDungeon extends Omit<Dungeon, "bosses" | "quests"> {
   readonly bosses: readonly { readonly name: string; readonly loot: readonly StoredLootItem[] }[];
   readonly quests: readonly StoredQuest[];

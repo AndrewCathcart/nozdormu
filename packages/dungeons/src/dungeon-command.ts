@@ -9,17 +9,19 @@ import {
   type APIActionRowComponent,
   type APIButtonComponent,
   type APIEmbed,
+  type APIEmbedField,
   ApplicationCommandOptionType,
   ButtonStyle,
   ComponentType,
   MessageFlags,
 } from "discord-api-types/v10";
-import type {
-  DungeonStore,
-  DungeonSummary,
-  StoredDungeon,
-  StoredLootItem,
-  StoredQuest,
+import {
+  type DungeonStore,
+  type DungeonSummary,
+  isKnownOnlyByName,
+  type StoredDungeon,
+  type StoredLootItem,
+  type StoredQuest,
 } from "./dungeon-store.ts";
 import { itemDetails } from "./item-text.ts";
 import type { Faction } from "./spyglass.ts";
@@ -39,11 +41,15 @@ function itemLine(item: StoredLootItem): string {
   return details === "" ? link : `${link} · ${details}`;
 }
 
+// What's shown of a list, then how many more there are, if any.
+function withHowManyMore(shown: readonly string[], total: number): string[] {
+  const more = total - shown.length;
+  return [...shown, ...(more > 0 ? [`and ${String(more)} more`] : [])];
+}
+
 // Items one a line: all of them, or the first few and how many more.
 function itemLines(items: readonly StoredLootItem[], maxShown: number): string[] {
-  const lines = items.slice(0, maxShown).map(itemLine);
-  const more = items.length - lines.length;
-  return [...lines, ...(more > 0 ? [`and ${String(more)} more`] : [])];
+  return withHowManyMore(items.slice(0, maxShown).map(itemLine), items.length);
 }
 
 // The top of both cards: the dungeon's name and levels.
@@ -80,6 +86,10 @@ const factionNames: Readonly<Record<Faction, string>> = {
   Both: "Both factions",
 };
 
+function questUrl(quest: Pick<StoredQuest, "id">): string {
+  return `https://www.wowhead.com/forever/quest=${String(quest.id)}`;
+}
+
 // A quest's faction, class, level, XP and Wowhead link, then its objective and rewards, leaving out
 // whatever hasn't been scanned.
 function questLines(quest: StoredQuest, maxRewardsShown: number): string {
@@ -91,7 +101,7 @@ function questLines(quest: StoredQuest, maxRewardsShown: number): string {
     quest.className === undefined ? undefined : `${quest.className}s only`,
     quest.requiredLevel === undefined ? undefined : `from level ${String(quest.requiredLevel)}`,
     quest.xp === undefined ? undefined : `${quest.xp.toLocaleString("en-GB")} XP`,
-    `[Wowhead](https://www.wowhead.com/forever/quest=${String(quest.id)})`,
+    `[Wowhead](${questUrl(quest)})`,
   ].filter((fact) => fact !== undefined);
   return [
     facts.join(" · "),
@@ -100,39 +110,63 @@ function questLines(quest: StoredQuest, maxRewardsShown: number): string {
   ].join("\n");
 }
 
-// The card showing a dungeon's quests, lowest level first, a section each. Quests whose level
-// isn't known come last.
+// Quests known only by name, linked one after another, as many as fit in a section.
+function nameOnlySection(quests: readonly StoredQuest[]): APIEmbedField {
+  const links = quests.map((quest) => `[${escapeMarkdown(quest.name)}](${questUrl(quest)})`);
+  const linksShown = (count: number): string =>
+    withHowManyMore(links.slice(0, count), links.length).join(" · ");
+  let shown = links.length;
+  while (linksShown(shown).length > maxFieldLength) {
+    shown -= 1;
+  }
+  return { name: "More quests, not scanned in full yet", value: linksShown(shown) };
+}
+
+// The card showing a dungeon's quests, lowest level first, a section each (quests whose level
+// isn't known after the rest), with those known only by name sharing one last section, since they
+// have nothing to show but a link. It shows at most this many rewards per quest and quests with
+// details, and can leave the name-only quests out, saying how many quests didn't fit.
 function questsCard(
   dungeon: StoredDungeon,
   maxRewardsShown: number,
   maxQuestsShown: number,
+  showNameOnly: boolean,
 ): APIEmbed {
-  const quests = dungeon.quests
+  const nameOnly = dungeon.quests.filter(isKnownOnlyByName);
+  const nameOnlySections = showNameOnly && nameOnly.length > 0 ? [nameOnlySection(nameOnly)] : [];
+  const detailed = dungeon.quests.filter((quest) => !isKnownOnlyByName(quest));
+  const quests = detailed
     .toSorted(
       (a, b) =>
         (a.requiredLevel ?? Number.POSITIVE_INFINITY) -
         (b.requiredLevel ?? Number.POSITIVE_INFINITY),
     )
-    .slice(0, Math.min(maxQuestsShown, maxFields));
-  const more = dungeon.quests.length - quests.length;
+    .slice(0, Math.min(maxQuestsShown, maxFields - nameOnlySections.length));
+  const more = detailed.length - quests.length + (showNameOnly ? 0 : nameOnly.length);
   return {
     ...heading(dungeon),
-    fields: quests.map((quest) => ({
-      name: quest.name,
-      value: questLines(quest, maxRewardsShown),
-    })),
+    fields: [
+      ...quests.map((quest) => ({
+        name: quest.name,
+        value: questLines(quest, maxRewardsShown),
+      })),
+      ...nameOnlySections,
+    ],
     footer: {
       text: `Quests and their details may be incomplete.${more > 0 ? ` ${String(more)} more quests didn't fit.` : ""}`,
     },
   };
 }
 
-// The quests card with every reward, or with fewer rewards per quest until it fits, then, if even
-// no rewards won't fit, with fewer quests.
+// The quests card with every reward, or, until it fits: fewer rewards per quest, then no rewards
+// and no name-only quests, then fewer quests.
 function fittingQuestsCard(dungeon: StoredDungeon): APIEmbed {
-  let fitted = fittingCard((shown) => questsCard(dungeon, shown, maxFields));
+  let fitted = fittingCard((shown) => questsCard(dungeon, shown, maxFields, true));
+  if (!fits(fitted)) {
+    fitted = questsCard(dungeon, 0, maxFields, false);
+  }
   for (let quests = maxFields - 1; !fits(fitted) && quests > 0; quests -= 1) {
-    fitted = questsCard(dungeon, 0, quests);
+    fitted = questsCard(dungeon, 0, quests, false);
   }
   return fitted;
 }

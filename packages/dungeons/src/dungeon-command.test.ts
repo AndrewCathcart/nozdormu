@@ -455,6 +455,20 @@ describe("/dungeon", () => {
   });
 });
 
+// A made-up quest known only by its ID and name.
+function nameOnly(id: number, name: string): StoredDungeon["quests"][number] {
+  return {
+    id,
+    name,
+    side: undefined,
+    className: undefined,
+    requiredLevel: undefined,
+    xp: undefined,
+    objective: undefined,
+    rewards: [],
+  };
+}
+
 // The buttons under the loot card of the made-up dungeon with two quests: "Bosses & loot" greyed
 // out and highlighted, as the card showing.
 const buttonsShowingLoot = [
@@ -527,8 +541,8 @@ describe("/dungeon's quests", () => {
                 ].join("\n"),
               },
               {
-                name: "Made-up Rumour",
-                value: "[Wowhead](https://www.wowhead.com/forever/quest=90102)",
+                name: "More quests, not scanned in full yet",
+                value: "[Made-up Rumour](https://www.wowhead.com/forever/quest=90102)",
               },
             ],
             footer: { text: "Quests and their details may be incomplete." },
@@ -668,7 +682,7 @@ describe("/dungeon's quests", () => {
         name: `Made-up Quest ${String(quest + 1)}`,
         side: undefined,
         className: undefined,
-        requiredLevel: undefined,
+        requiredLevel: 13,
         xp: undefined,
         objective: undefined,
         rewards: [],
@@ -682,6 +696,82 @@ describe("/dungeon's quests", () => {
     expect(questsCard?.fields?.length).toBe(25);
     expect(questsCard?.footer?.text).toBe(
       "Quests and their details may be incomplete. 5 more quests didn't fit.",
+    );
+  });
+
+  it("lists several quests known only by name in one section, one after another", async () => {
+    const rumours: StoredDungeon = {
+      ...hollow,
+      quests: [nameOnly(90_201, "Made-up Lead"), nameOnly(90_202, "Made_up *Errand*")],
+    };
+    const command = createDungeonCommand(createFakeStore([rumours]));
+
+    const response = await command.press?.({ customId: "dungeon:quests:The Made-up Hollow" });
+
+    expect(response?.message.embeds?.[0]?.fields).toEqual([
+      {
+        name: "More quests, not scanned in full yet",
+        value:
+          "[Made-up Lead](https://www.wowhead.com/forever/quest=90201) · [Made\\_up \\*Errand\\*](https://www.wowhead.com/forever/quest=90202)",
+      },
+    ]);
+  });
+
+  it("cuts a long list of quests known only by name to fit its section, saying how many more", async () => {
+    // Each name is 67 characters ("Made-up Quest 10" to "Made-up Quest 29", a space and 50 x's),
+    // so each link takes 114 and the separator 3. Eight links and " · and 12 more" take 947
+    // characters; nine would take 1,064, over a section's 1,024.
+    const many: StoredDungeon = {
+      ...hollow,
+      quests: Array.from({ length: 20 }, (_quest, quest) =>
+        nameOnly(90_300 + quest, `Made-up Quest ${String(quest + 10)} ${"x".repeat(50)}`),
+      ),
+    };
+    const command = createDungeonCommand(createFakeStore([many]));
+
+    const response = await command.press?.({ customId: "dungeon:quests:The Made-up Hollow" });
+
+    expect(response?.message.embeds?.[0]?.fields?.[0]?.value).toBe(
+      [
+        ...Array.from(
+          { length: 8 },
+          (_quest, quest) =>
+            `[Made-up Quest ${String(quest + 10)} ${"x".repeat(50)}](https://www.wowhead.com/forever/quest=${String(90_300 + quest)})`,
+        ),
+        "and 12 more",
+      ].join(" · "),
+    );
+  });
+
+  it("leaves out the quests known only by name before any quest with details, when not all fit", async () => {
+    // 11 quests with 400-letter objectives take 5,789 characters with the title, levels and footer
+    // (see the test above), leaving no room for the 983-character section of 20 long names.
+    const crowded: StoredDungeon = {
+      ...hollow,
+      quests: [
+        ...Array.from({ length: 11 }, (_quest, quest) => ({
+          id: 91_000 + quest,
+          name: `Made-up Quest ${String(quest + 1)}`,
+          side: "Both" as const,
+          className: undefined,
+          requiredLevel: 13,
+          xp: 1000,
+          objective: "a".repeat(400),
+          rewards: [],
+        })),
+        ...Array.from({ length: 20 }, (_quest, quest) =>
+          nameOnly(90_300 + quest, `Made-up Quest ${String(quest + 10)} ${"x".repeat(50)}`),
+        ),
+      ],
+    };
+    const command = createDungeonCommand(createFakeStore([crowded]));
+
+    const response = await command.press?.({ customId: "dungeon:quests:The Made-up Hollow" });
+
+    const [questsCard] = response?.message.embeds ?? [];
+    expect(questsCard?.fields?.length).toBe(11);
+    expect(questsCard?.footer?.text).toBe(
+      "Quests and their details may be incomplete. 20 more quests didn't fit.",
     );
   });
 });
