@@ -6,6 +6,7 @@ import {
 } from "@nozdormu/core";
 import { type APIEmbed, ApplicationCommandOptionType, MessageFlags } from "discord-api-types/v10";
 import type { DungeonStore, DungeonSummary, StoredDungeon } from "./dungeon-store.ts";
+import { itemDetails } from "./item-text.ts";
 
 // Discord's limits on a card: its sections, each section's text, and the whole card's text.
 const maxFields = 25;
@@ -20,12 +21,11 @@ function lootLines(loot: StoredDungeon["bosses"][number]["loot"], maxShown: numb
   if (loot.length === 0) {
     return "No loot seen yet";
   }
-  const lines = loot
-    .slice(0, maxShown)
-    .map(
-      (item) =>
-        `[${escapeMarkdown(item.name)}](https://www.wowhead.com/forever/item=${String(item.itemId)})`,
-    );
+  const lines = loot.slice(0, maxShown).map((item) => {
+    const link = `[${escapeMarkdown(item.name)}](https://www.wowhead.com/forever/item=${String(item.itemId)})`;
+    const details = item.scanned === undefined ? "" : itemDetails(item.scanned);
+    return details === "" ? link : `${link} · ${details}`;
+  });
   const more = loot.length - lines.length;
   return [...lines, ...(more > 0 ? [`and ${String(more)} more`] : [])].join("\n");
 }
