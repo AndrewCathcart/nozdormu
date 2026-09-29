@@ -6,6 +6,14 @@ import {
   type SeenPostStore,
 } from "@nozdormu/blueposts";
 import {
+  createCalendarFeature,
+  createPostedReminderStore,
+  createScheduledEvents,
+  foreverMilestones,
+  type PostedReminderStore,
+  type ScheduledEvents,
+} from "@nozdormu/calendar";
+import {
   type ChannelPublisher,
   createChannelPublisher,
   createRecentPostReader,
@@ -63,6 +71,9 @@ export interface FeatureDeps {
   readonly readStaffPosts: ForumReader;
   readonly seenStaffPosts: SeenPostStore;
   readonly logger: Pick<Logger, "info" | "warn">;
+  readonly now: () => Date;
+  readonly postedReminders: PostedReminderStore;
+  readonly scheduledEvents: ScheduledEvents;
   readonly readSpyglass: SpyglassReader;
   readonly dungeonStore: DungeonStore;
 }
@@ -84,6 +95,9 @@ export function createFeatureDeps(
     gameDataSource: createWagoSource({ fetch, product: foreverProduct }),
     readStaffPosts: createForumReader({ fetch, forum: euForums.address }),
     seenStaffPosts: createSeenPostStore(db),
+    now: () => new Date(),
+    postedReminders: createPostedReminderStore(db),
+    scheduledEvents: createScheduledEvents(rest, config.discord.guildId),
     readSpyglass: createSpyglassReader({ fetch }),
     dungeonStore: createDungeonStore(db),
   };
@@ -112,6 +126,16 @@ export function createFeatures(deps: FeatureDeps): Feature[] {
       groups: euForums.groups,
       readPosts: deps.readStaffPosts,
       seenPosts: deps.seenStaffPosts,
+      publish: deps.publish,
+      recentPosts: deps.recentPosts,
+      logger: deps.logger,
+    }),
+    createCalendarFeature({
+      newsChannelId: deps.config.foreverNews.channelId,
+      milestones: foreverMilestones,
+      now: deps.now,
+      posted: deps.postedReminders,
+      events: deps.scheduledEvents,
       publish: deps.publish,
       recentPosts: deps.recentPosts,
       logger: deps.logger,

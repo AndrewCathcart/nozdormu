@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@nozdormu/blueposts": "workspace:*",
+    "@nozdormu/calendar": "workspace:*",
     "@nozdormu/core": "workspace:*",
     "@nozdormu/db": "workspace:*",
     "@nozdormu/dungeons": "workspace:*",

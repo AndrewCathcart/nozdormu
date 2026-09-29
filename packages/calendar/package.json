@@ -1,0 +1,17 @@
+{
+  "name": "@nozdormu/calendar",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@nozdormu/core": "workspace:*",
+    "@nozdormu/db": "workspace:*",
+    "discord-api-types": "catalog:",
+    "discord.js": "catalog:",
+    "drizzle-orm": "catalog:",
+    "zod": "catalog:"
+  }
+}

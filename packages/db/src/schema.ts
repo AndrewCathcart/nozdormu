@@ -191,3 +191,9 @@ export const dungeonLoot = pgTable(
     }).onDelete("cascade"),
   ],
 );
+
+// The calendar reminders the Forever news channel has had, by key (such as "launch-week").
+export const calendarReminders = pgTable("calendar_reminders", {
+  key: text("key").primaryKey(),
+  postedAt: timestamp("posted_at", { withTimezone: true }).notNull().defaultNow(),
+});

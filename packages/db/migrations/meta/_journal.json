@@ -71,6 +71,13 @@
       "when": 1790695230513,
       "tag": "0009_blue_posts",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1790695660122,
+      "tag": "0010_calendar_reminders",
+      "breakpoints": true
     }
   ]
 }
