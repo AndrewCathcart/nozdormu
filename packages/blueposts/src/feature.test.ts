@@ -147,6 +147,17 @@ describe("createBluePostsFeature", () => {
     expect(deps.seenPosts.ids).toEqual(new Set([1, 2, 3, 4, 5]));
   });
 
+  it("posts only the latest three at the first check, whatever the store gives back after", async () => {
+    // Like a dry run's store, which keeps nothing it's asked to record.
+    const deps = createDeps([post(5), post(4), post(3), post(2), post(1)], "never checked");
+    deps.seenPosts.recordFirstCheck.mockResolvedValue(undefined);
+    deps.seenPosts.markSeen.mockResolvedValue(undefined);
+
+    await pollJob(deps).run();
+
+    expect(postedUrls(deps)).toEqual([post(3).url, post(4).url, post(5).url]);
+  });
+
   it("counts only Forever posts among the latest three at the first check", async () => {
     const retail = { forum: { name: "General Discussion", parent: undefined } };
     const deps = createDeps(

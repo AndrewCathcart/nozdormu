@@ -53,8 +53,11 @@ export function createBluePostsFeature(deps: BluePostsFeatureDeps): Feature {
     const posts = [
       ...new Map(pages.flatMap((page) => page.posts).map((post) => [post.id, post])).values(),
     ];
-    let history = await deps.seenPosts.history(feed);
-    const firstCheck = history === undefined;
+    const history = await deps.seenPosts.history(feed);
+    let seen: ReadonlySet<number>;
+    // A post no newer than this was already there at the first check, and has resurfaced (say,
+    // after a newer post was deleted). Every later post gets posted and recorded, so it isn't new.
+    let baseline: Date | undefined;
     if (history === undefined) {
       // Everything older than the latest few Forever posts counts as already there. Those few are
       // then new, and get posted below like any other.
@@ -71,27 +74,30 @@ export function createBluePostsFeature(deps: BluePostsFeatureDeps): Feature {
         { event: "blueposts.first_check", feed, posts: alreadyThere.length },
         "Recorded the older staff posts already on the forum without posting them",
       );
-      history = (await deps.seenPosts.history(feed)) ?? { baseline: undefined };
-    }
-    const seen = await deps.seenPosts.seenIds(
-      feed,
-      posts.map((post) => post.id),
-    );
-    // Each group's page shows only its latest posts. If none of them was seen before, more arrived
-    // since the last check than it shows, perhaps while the bot was down.
-    // At the first check, the latest posts are unseen on purpose.
-    for (const page of firstCheck ? [] : pages) {
-      if (page.posts.length > 0 && page.posts.every((post) => !seen.has(post.id))) {
-        deps.logger.warn(
-          { event: "blueposts.gap", feed, group: page.group, posts: page.posts.length },
-          "Saw none of the group's posts before, so some may have been missed",
-        );
+      // What was just recorded, rather than read back from the store (which a dry run's doesn't
+      // keep), with the newest of it as the baseline, as the store takes it.
+      seen = new Set(alreadyThere.map((post) => post.id));
+      const times = alreadyThere.map((post) => post.createdAt.getTime());
+      baseline = times.length === 0 ? undefined : new Date(Math.max(...times));
+    } else {
+      seen = await deps.seenPosts.seenIds(
+        feed,
+        posts.map((post) => post.id),
+      );
+      baseline = history.baseline;
+      // Each group's page shows only its latest posts. If none of them was seen before, more
+      // arrived since the last check than it shows, perhaps while the bot was down. (At the first
+      // check, the latest posts are unseen on purpose.)
+      for (const page of pages) {
+        if (page.posts.length > 0 && page.posts.every((post) => !seen.has(post.id))) {
+          deps.logger.warn(
+            { event: "blueposts.gap", feed, group: page.group, posts: page.posts.length },
+            "Saw none of the group's posts before, so some may have been missed",
+          );
+        }
       }
     }
     const unseen = posts.filter((post) => !seen.has(post.id));
-    // A post no newer than the first check's newest was already there, and has resurfaced (say,
-    // after a newer post was deleted). Every later post gets posted and recorded, so it isn't new.
-    const { baseline } = history;
     const isNew = (post: StaffPost): boolean => baseline === undefined || post.createdAt > baseline;
     const fresh = unseen
       .filter((post) => isAboutForever(post) && isNew(post))
