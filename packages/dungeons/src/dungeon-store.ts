@@ -1,8 +1,21 @@
-import { type Database, dungeonBosses, dungeonLoot, dungeons } from "@nozdormu/db";
-import { asc, eq } from "drizzle-orm";
-import type { Dungeon } from "./spyglass.ts";
+import {
+  type Database,
+  dungeonBosses,
+  dungeonLoot,
+  dungeons,
+  scannedItems,
+  scannedItemStats,
+} from "@nozdormu/db";
+import { asc, eq, inArray } from "drizzle-orm";
+import type { Dungeon, LootItem, ScannedItem, SpyglassData } from "./spyglass.ts";
 
-export interface StoredDungeon extends Dungeon {
+// A loot item, with its scanned details where Spyglass has scanned it.
+export interface StoredLootItem extends LootItem {
+  readonly scanned: ScannedItem | undefined;
+}
+
+export interface StoredDungeon extends Omit<Dungeon, "bosses"> {
+  readonly bosses: readonly { readonly name: string; readonly loot: readonly StoredLootItem[] }[];
   // The game build Spyglass scanned it in.
   readonly build: string;
 }
@@ -10,8 +23,8 @@ export interface StoredDungeon extends Dungeon {
 export type DungeonSummary = Pick<Dungeon, "name" | "minLevel" | "maxLevel">;
 
 export interface DungeonStore {
-  // Replaces every stored dungeon with these, in one transaction.
-  readonly replaceAll: (build: string, dungeons: readonly Dungeon[]) => Promise<void>;
+  // Replaces every stored dungeon and scanned item with these, in one transaction.
+  readonly replaceAll: (synced: SpyglassData) => Promise<void>;
   readonly get: (name: string) => Promise<StoredDungeon | undefined>;
   // Every dungeon, lowest levels first.
   readonly list: () => Promise<DungeonSummary[]>;
@@ -19,45 +32,107 @@ export interface DungeonStore {
   readonly loadedBuild: () => Promise<string | undefined>;
 }
 
+// Postgres allows 65,535 parameters per statement; at most six per row keeps this well under.
+const insertBatchSize = 1000;
+
+async function insertInBatches<Row>(
+  rows: readonly Row[],
+  insert: (batch: Row[]) => Promise<unknown>,
+): Promise<void> {
+  for (let start = 0; start < rows.length; start += insertBatchSize) {
+    await insert(rows.slice(start, start + insertBatchSize));
+  }
+}
+
 export function createDungeonStore(db: Database): DungeonStore {
+  // The scanned details of these items, by ID.
+  const scannedById = async (ids: readonly number[]): Promise<Map<number, ScannedItem>> => {
+    if (ids.length === 0) {
+      return new Map();
+    }
+    const items = await db
+      .select()
+      .from(scannedItems)
+      .where(inArray(scannedItems.id, [...ids]));
+    const stats = await db
+      .select()
+      .from(scannedItemStats)
+      .where(inArray(scannedItemStats.itemId, [...ids]))
+      .orderBy(asc(scannedItemStats.position));
+    return new Map(
+      items.map((item) => [
+        item.id,
+        {
+          ...item,
+          stats: stats
+            .filter((row) => row.itemId === item.id)
+            .map(({ stat, value }) => ({ stat, value })),
+        },
+      ]),
+    );
+  };
+
   return {
-    replaceAll: async (build, synced) => {
+    replaceAll: async ({ build, dungeons: synced, items }) => {
       await db.transaction(async (tx) => {
         await tx.delete(dungeons);
-        if (synced.length === 0) {
-          return;
-        }
-        await tx.insert(dungeons).values(
-          synced.map((dungeon) => ({
-            name: dungeon.name,
-            minLevel: dungeon.minLevel,
-            maxLevel: dungeon.maxLevel,
-            requiredLevel: dungeon.requiredLevel ?? null,
-            sourceBuild: build,
-          })),
+        await tx.delete(scannedItems);
+        await insertInBatches(items, (batch) =>
+          tx.insert(scannedItems).values(
+            batch.map((item) => ({
+              id: item.id,
+              name: item.name,
+              quality: item.quality,
+              itemLevel: item.itemLevel,
+              requiredLevel: item.requiredLevel,
+              slot: item.slot,
+            })),
+          ),
+        );
+        await insertInBatches(
+          items.flatMap((item) =>
+            item.stats.map(({ stat, value }, position) => ({
+              itemId: item.id,
+              position,
+              stat,
+              value,
+            })),
+          ),
+          (batch) => tx.insert(scannedItemStats).values(batch),
+        );
+        await insertInBatches(synced, (batch) =>
+          tx.insert(dungeons).values(
+            batch.map((dungeon) => ({
+              name: dungeon.name,
+              minLevel: dungeon.minLevel,
+              maxLevel: dungeon.maxLevel,
+              requiredLevel: dungeon.requiredLevel ?? null,
+              sourceBuild: build,
+            })),
+          ),
         );
         const bosses = synced.flatMap((dungeon) =>
           dungeon.bosses.map((boss, position) => ({ dungeon: dungeon.name, position, boss })),
         );
-        if (bosses.length > 0) {
-          await tx
+        await insertInBatches(bosses, (batch) =>
+          tx
             .insert(dungeonBosses)
             .values(
-              bosses.map(({ dungeon, position, boss }) => ({ dungeon, position, name: boss.name })),
-            );
-        }
-        const loot = bosses.flatMap(({ dungeon, position: bossPosition, boss }) =>
-          boss.loot.map((item, position) => ({
-            dungeon,
-            bossPosition,
-            position,
-            itemId: item.itemId,
-            itemName: item.name,
-          })),
+              batch.map(({ dungeon, position, boss }) => ({ dungeon, position, name: boss.name })),
+            ),
         );
-        if (loot.length > 0) {
-          await tx.insert(dungeonLoot).values(loot);
-        }
+        await insertInBatches(
+          bosses.flatMap(({ dungeon, position: bossPosition, boss }) =>
+            boss.loot.map((item, position) => ({
+              dungeon,
+              bossPosition,
+              position,
+              itemId: item.itemId,
+              itemName: item.name,
+            })),
+          ),
+          (batch) => tx.insert(dungeonLoot).values(batch),
+        );
       });
     },
     get: async (name) => {
@@ -79,6 +154,7 @@ export function createDungeonStore(db: Database): DungeonStore {
         .from(dungeonLoot)
         .where(eq(dungeonLoot.dungeon, name))
         .orderBy(asc(dungeonLoot.bossPosition), asc(dungeonLoot.position));
+      const scanned = await scannedById([...new Set(loot.map((item) => item.itemId))]);
       return {
         name: found.name,
         minLevel: found.minLevel,
@@ -88,7 +164,11 @@ export function createDungeonStore(db: Database): DungeonStore {
           name: boss.name,
           loot: loot
             .filter((item) => item.bossPosition === boss.position)
-            .map(({ itemId, name: itemName }) => ({ itemId, name: itemName })),
+            .map(({ itemId, name: itemName }) => ({
+              itemId,
+              name: itemName,
+              scanned: scanned.get(itemId),
+            })),
         })),
         build: found.sourceBuild,
       };

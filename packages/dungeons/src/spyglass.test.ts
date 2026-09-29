@@ -51,8 +51,8 @@ function urlOf(input: string | URL | Request): string {
   return input instanceof Request ? input.url : input instanceof URL ? input.href : input;
 }
 
-// Answers Spyglass's config, the listing of its repository's files (the dungeon files, and others
-// that aren't dungeons) and each dungeon file.
+// Answers Spyglass's config, the listing of its repository's files (these data files, by path under
+// its data folder, and one that isn't data) and each data file.
 function createFakeFetch(files: Readonly<Record<string, unknown>>) {
   return vi.fn<typeof fetch>((input) => {
     const url = urlOf(input);
@@ -64,22 +64,21 @@ function createFakeFetch(files: Readonly<Record<string, unknown>>) {
         json({
           files: [
             { name: "/README.md" },
-            { name: "/.contribute/data/items/items_0.json" },
-            ...Object.keys(files).map((name) => ({ name: `/.contribute/data/dungeons/${name}` })),
+            ...Object.keys(files).map((path) => ({ name: `/.contribute/data/${path}` })),
           ],
         }),
       );
     }
-    const name = url.startsWith(`${data}/dungeons/`) ? url.slice(`${data}/dungeons/`.length) : "";
+    const path = url.startsWith(`${data}/`) ? url.slice(`${data}/`.length) : "";
     return Promise.resolve(
-      name in files ? json(files[name]) : new Response("Not found", { status: 404 }),
+      path in files ? json(files[path]) : new Response("Not found", { status: 404 }),
     );
   });
 }
 
 describe("createSpyglassReader", () => {
   it("reads Forever's dungeons with their levels and their bosses' loot, and the build", async () => {
-    const fetch = createFakeFetch({ "the_made_up_hollow.json": madeUpHollow });
+    const fetch = createFakeFetch({ "dungeons/the_made_up_hollow.json": madeUpHollow });
 
     expect(await createSpyglassReader({ fetch })()).toEqual({
       build: "1.60.1.69913",
@@ -101,13 +100,66 @@ describe("createSpyglassReader", () => {
           ],
         },
       ],
+      items: [],
     });
+  });
+
+  it("reads the items it has scanned, with their stats", async () => {
+    const fetch = createFakeFetch({
+      "items/items_280000.json": {
+        "280101": {
+          names: { enUS: "Made-up Choker" },
+          quality: 3,
+          itemLevel: 18,
+          reqLevel: 13,
+          classID: 4,
+          subclassID: 0,
+          slot: "INVTYPE_NECK",
+          stats: { STAMINA: 4, SPIRIT: 2 },
+        },
+        "280102": {
+          names: { enUS: "Made-up Pebble" },
+          quality: 0,
+          itemLevel: 1,
+          reqLevel: 0,
+          classID: 15,
+          subclassID: 0,
+          slot: "INVTYPE_NON_EQUIP_IGNORE",
+        },
+      },
+    });
+
+    const { items } = await createSpyglassReader({ fetch })();
+
+    expect(items).toEqual([
+      {
+        id: 280_101,
+        name: "Made-up Choker",
+        quality: 3,
+        itemLevel: 18,
+        requiredLevel: 13,
+        slot: "INVTYPE_NECK",
+        stats: [
+          { stat: "STAMINA", value: 4 },
+          { stat: "SPIRIT", value: 2 },
+        ],
+      },
+      {
+        id: 280_102,
+        name: "Made-up Pebble",
+        quality: 0,
+        itemLevel: 1,
+        requiredLevel: 0,
+        slot: "INVTYPE_NON_EQUIP_IGNORE",
+        stats: [],
+      },
+    ]);
   });
 
   it("leaves out dungeons without a level range, which Forever doesn't have", async () => {
     const fetch = createFakeFetch({
-      "made_up_leftover_crypts.json": leftoverDungeon,
-      "the_made_up_hollow.json": madeUpHollow,
+      "dungeons/made_up_leftover_crypts.json": leftoverDungeon,
+      "dungeons/the_made_up_hollow.json": madeUpHollow,
     });
 
     const { dungeons } = await createSpyglassReader({ fetch })();
@@ -117,7 +169,7 @@ describe("createSpyglassReader", () => {
 
   it("gives no entry level for a dungeon that doesn't say", async () => {
     const { requiredLevel: _, ...withoutEntryLevel } = madeUpHollow;
-    const fetch = createFakeFetch({ "the_made_up_hollow.json": withoutEntryLevel });
+    const fetch = createFakeFetch({ "dungeons/the_made_up_hollow.json": withoutEntryLevel });
 
     const { dungeons } = await createSpyglassReader({ fetch })();
 
@@ -126,8 +178,8 @@ describe("createSpyglassReader", () => {
 
   it("reads only the listing's dungeon files", async () => {
     const fetch = createFakeFetch({
-      ".gitkeep": {},
-      "the_made_up_hollow.json": madeUpHollow,
+      "dungeons/.gitkeep": {},
+      "dungeons/the_made_up_hollow.json": madeUpHollow,
     });
 
     await createSpyglassReader({ fetch })();

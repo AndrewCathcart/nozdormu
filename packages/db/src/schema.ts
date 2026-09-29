@@ -6,6 +6,7 @@ import {
   integer,
   pgTable,
   primaryKey,
+  real,
   text,
   timestamp,
 } from "drizzle-orm/pg-core";
@@ -169,4 +170,29 @@ export const dungeonLoot = pgTable(
       foreignColumns: [dungeonBosses.dungeon, dungeonBosses.position],
     }).onDelete("cascade"),
   ],
+);
+
+// Items as Spyglass scanned them in the game, replaced with the dungeons by each sync. The slot is
+// the game's name for where it's worn, such as "INVTYPE_NECK".
+export const scannedItems = pgTable("scanned_items", {
+  id: integer("id").primaryKey(),
+  name: text("name").notNull(),
+  quality: integer("quality").notNull(),
+  itemLevel: integer("item_level").notNull(),
+  requiredLevel: integer("required_level").notNull(),
+  slot: text("slot").notNull(),
+});
+
+// Each scanned item's exact stats, by the game's name for them, such as "STAMINA".
+export const scannedItemStats = pgTable(
+  "scanned_item_stats",
+  {
+    itemId: integer("item_id")
+      .notNull()
+      .references(() => scannedItems.id, { onDelete: "cascade" }),
+    position: integer("position").notNull(),
+    stat: text("stat").notNull(),
+    value: real("value").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.itemId, table.position] })],
 );

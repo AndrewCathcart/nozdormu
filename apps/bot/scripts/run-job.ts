@@ -58,10 +58,10 @@ function readOnlyGameData(store: GameDataStore): GameDataStore {
 function readOnlyDungeons(store: DungeonStore): DungeonStore {
   return {
     ...store,
-    replaceAll: (build, dungeons) => {
+    replaceAll: ({ build, dungeons, items }) => {
       logger.info(
-        { event: "dry_run.dungeons", build, dungeons: dungeons.length },
-        "Would replace the stored dungeons",
+        { event: "dry_run.dungeons", build, dungeons: dungeons.length, items: items.length },
+        "Would replace the stored dungeons and items",
       );
       return Promise.resolve();
     },

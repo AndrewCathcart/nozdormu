@@ -9,28 +9,36 @@ export interface DungeonFeatureDeps {
   readonly logger: Pick<Logger, "info">;
 }
 
-// Spyglass lists 29 Forever dungeons and wings. A read with far fewer has gone wrong, and would
-// otherwise replace the good ones.
+// Spyglass lists 29 Forever dungeons and wings, and about 23,000 scanned items. A read with far
+// fewer has gone wrong, and would otherwise replace the good data.
 const minDungeons = 20;
+const minItems = 10_000;
 
 // /dungeon, and the sync that keeps its data in step with Spyglass every 6 hours.
 export function createDungeonFeature(deps: DungeonFeatureDeps): Feature {
   const sync = async (): Promise<void> => {
-    const { build, dungeons } = await deps.readSpyglass();
+    const synced = await deps.readSpyglass();
+    const { build, dungeons, items } = synced;
     if (dungeons.length < minDungeons) {
       throw new Error(
-        `Spyglass listed only ${String(dungeons.length)} Forever dungeons, so the stored ones were kept.`,
+        `Spyglass listed only ${String(dungeons.length)} Forever dungeons, so the stored data was kept.`,
       );
     }
-    await deps.store.replaceAll(build, dungeons);
+    if (items.length < minItems) {
+      throw new Error(
+        `Spyglass listed only ${String(items.length)} scanned items, so the stored data was kept.`,
+      );
+    }
+    await deps.store.replaceAll(synced);
     deps.logger.info(
       {
         event: "dungeons.synced",
         build,
         dungeons: dungeons.length,
         bosses: dungeons.reduce((total, dungeon) => total + dungeon.bosses.length, 0),
+        items: items.length,
       },
-      "Synced Forever's dungeons from Spyglass",
+      "Synced Forever's dungeons and items from Spyglass",
     );
   };
 

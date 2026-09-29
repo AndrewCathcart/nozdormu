@@ -2,7 +2,7 @@ import type { CommandReply } from "@nozdormu/core";
 import { type APIEmbed, MessageFlags } from "discord-api-types/v10";
 import { describe, expect, it, vi } from "vitest";
 import { createDungeonCommand } from "./dungeon-command.ts";
-import type { DungeonStore, StoredDungeon } from "./dungeon-store.ts";
+import type { DungeonStore, StoredDungeon, StoredLootItem } from "./dungeon-store.ts";
 
 const hollow: StoredDungeon = {
   name: "The Made-up Hollow",
@@ -13,8 +13,23 @@ const hollow: StoredDungeon = {
     {
       name: "Made-up Warden",
       loot: [
-        { itemId: 280_101, name: "Made-up Choker" },
-        { itemId: 280_102, name: "Made_up *Bracers*" },
+        {
+          itemId: 280_101,
+          name: "Made-up Choker",
+          scanned: {
+            id: 280_101,
+            name: "Made-up Choker",
+            quality: 3,
+            itemLevel: 18,
+            requiredLevel: 13,
+            slot: "INVTYPE_NECK",
+            stats: [
+              { stat: "STAMINA", value: 4 },
+              { stat: "SPIRIT", value: 2 },
+            ],
+          },
+        },
+        { itemId: 280_102, name: "Made_up *Bracers*", scanned: undefined },
       ],
     },
     { name: "Made-up Tyrant", loot: [] },
@@ -78,7 +93,7 @@ describe("/dungeon", () => {
             {
               name: "Made-up Warden",
               value: [
-                "[Made-up Choker](https://www.wowhead.com/forever/item=280101)",
+                "[Made-up Choker](https://www.wowhead.com/forever/item=280101) · Neck · +4 Sta, +2 Spi",
                 "[Made\\_up \\*Bracers\\*](https://www.wowhead.com/forever/item=280102)",
               ].join("\n"),
             },
@@ -93,6 +108,36 @@ describe("/dungeon", () => {
     });
   });
 
+  it("shows armour, damage per second and other stats readably", async () => {
+    const stave: StoredLootItem = {
+      itemId: 280_103,
+      name: "Made-up Stave",
+      scanned: {
+        id: 280_103,
+        name: "Made-up Stave",
+        quality: 3,
+        itemLevel: 18,
+        requiredLevel: 13,
+        slot: "INVTYPE_2HWEAPON",
+        stats: [
+          { stat: "RESISTANCE0_NAME", value: 100 },
+          { stat: "DAMAGE_PER_SECOND", value: 11.88 },
+          { stat: "SPELL_POWER", value: 18 },
+          { stat: "ATTACK_POWER_VS_BEAST", value: 3 },
+        ],
+      },
+    };
+    const command = createDungeonCommand(
+      createFakeStore([{ ...hollow, bosses: [{ name: "Made-up Warden", loot: [stave] }] }]),
+    );
+
+    const reply = await command.handle(invoke("The Made-up Hollow"));
+
+    expect(card(reply).fields?.[0]?.value).toBe(
+      "[Made-up Stave](https://www.wowhead.com/forever/item=280103) · Two-Hand · 100 Armor, 11.9 DPS, +18 Spell Power, +3 Attack Power Vs Beast",
+    );
+  });
+
   it("shows fewer items per boss when all the loot won't fit on one card", async () => {
     // 20 bosses with 8 linked items each come to over 10,000 characters, where a card allows 6,000.
     const packed: StoredDungeon = {
@@ -102,6 +147,7 @@ describe("/dungeon", () => {
         loot: Array.from({ length: 8 }, (_item, item) => ({
           itemId: 281_000 + item,
           name: `Made-up Loot Item 0${String(item + 1)}`,
+          scanned: undefined,
         })),
       })),
     };

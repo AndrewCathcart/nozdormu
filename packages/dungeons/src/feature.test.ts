@@ -2,7 +2,7 @@ import type { Logger, ScheduledJob } from "@nozdormu/core";
 import { describe, expect, it, vi } from "vitest";
 import type { DungeonStore } from "./dungeon-store.ts";
 import { createDungeonFeature, type DungeonFeatureDeps } from "./feature.ts";
-import type { Dungeon, SpyglassReader } from "./spyglass.ts";
+import type { Dungeon, ScannedItem, SpyglassData, SpyglassReader } from "./spyglass.ts";
 
 // Made-up dungeons, each with one boss.
 function dungeons(count: number): Dungeon[] {
@@ -15,11 +15,26 @@ function dungeons(count: number): Dungeon[] {
   }));
 }
 
-function createDeps(found: readonly Dungeon[]) {
+// Made-up scanned items, without stats.
+function items(count: number): ScannedItem[] {
+  return Array.from({ length: count }, (_, index) => ({
+    id: 280_000 + index,
+    name: `Made-up Item ${String(index + 1)}`,
+    quality: 2,
+    itemLevel: 20,
+    requiredLevel: 15,
+    slot: "INVTYPE_CHEST",
+    stats: [],
+  }));
+}
+
+function synced(dungeonCount: number, itemCount: number): SpyglassData {
+  return { build: "1.60.1.69913", dungeons: dungeons(dungeonCount), items: items(itemCount) };
+}
+
+function createDeps(found: SpyglassData) {
   return {
-    readSpyglass: vi
-      .fn<SpyglassReader>()
-      .mockResolvedValue({ build: "1.60.1.69913", dungeons: found }),
+    readSpyglass: vi.fn<SpyglassReader>().mockResolvedValue(found),
     store: {
       replaceAll: vi.fn<DungeonStore["replaceAll"]>().mockResolvedValue(undefined),
       get: vi.fn<DungeonStore["get"]>().mockResolvedValue(undefined),
@@ -40,29 +55,38 @@ function syncJob(deps: DungeonFeatureDeps): ScheduledJob {
 
 describe("createDungeonFeature", () => {
   it("syncs the dungeons every 6 hours", () => {
-    expect(syncJob(createDeps([]))).toMatchObject({
+    expect(syncJob(createDeps(synced(0, 0)))).toMatchObject({
       name: "dungeons.sync",
       intervalMs: 6 * 60 * 60_000,
     });
   });
 
-  it("replaces the stored dungeons with Spyglass's, and logs how many", async () => {
-    const deps = createDeps(dungeons(25));
+  it("replaces the stored dungeons and items with Spyglass's, and logs how many", async () => {
+    const deps = createDeps(synced(25, 10_000));
 
     await syncJob(deps).run();
 
-    expect(deps.store.replaceAll).toHaveBeenCalledExactlyOnceWith("1.60.1.69913", dungeons(25));
+    expect(deps.store.replaceAll).toHaveBeenCalledExactlyOnceWith(synced(25, 10_000));
     expect(deps.logger.info).toHaveBeenCalledExactlyOnceWith(
-      { event: "dungeons.synced", build: "1.60.1.69913", dungeons: 25, bosses: 25 },
-      "Synced Forever's dungeons from Spyglass",
+      { event: "dungeons.synced", build: "1.60.1.69913", dungeons: 25, bosses: 25, items: 10_000 },
+      "Synced Forever's dungeons and items from Spyglass",
     );
   });
 
-  it("keeps the stored dungeons when Spyglass lists far fewer than Forever has", async () => {
-    const deps = createDeps(dungeons(19));
+  it("keeps the stored data when Spyglass lists far fewer dungeons than Forever has", async () => {
+    const deps = createDeps(synced(19, 10_000));
 
     await expect(syncJob(deps).run()).rejects.toThrow(
-      new Error("Spyglass listed only 19 Forever dungeons, so the stored ones were kept."),
+      new Error("Spyglass listed only 19 Forever dungeons, so the stored data was kept."),
+    );
+    expect(deps.store.replaceAll).not.toHaveBeenCalled();
+  });
+
+  it("keeps the stored data when Spyglass lists far fewer items than it has scanned", async () => {
+    const deps = createDeps(synced(25, 9_999));
+
+    await expect(syncJob(deps).run()).rejects.toThrow(
+      new Error("Spyglass listed only 9999 scanned items, so the stored data was kept."),
     );
     expect(deps.store.replaceAll).not.toHaveBeenCalled();
   });
