@@ -1,0 +1,16 @@
+{
+  "name": "@nozdormu/digest",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "catalog:",
+    "@nozdormu/core": "workspace:*",
+    "discord-api-types": "catalog:",
+    "discord.js": "catalog:",
+    "zod": "catalog:"
+  }
+}

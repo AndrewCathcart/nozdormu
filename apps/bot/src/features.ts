@@ -1,3 +1,4 @@
+import Anthropic from "@anthropic-ai/sdk";
 import {
   type ChannelPublisher,
   createChannelPublisher,
@@ -23,6 +24,15 @@ import {
   type GameDataSource,
   type GameDataStore,
 } from "@nozdormu/gamedata";
+import {
+  type ChatReader,
+  createClaudeWriter,
+  createDigestFeature,
+  createDiscordChatReader,
+  createOpenAiIllustrator,
+  type DigestWriter,
+  type Illustrator,
+} from "@nozdormu/digest";
 import { createPingFeature } from "@nozdormu/ping";
 import {
   createSeenVideoStore,
@@ -44,16 +54,20 @@ export interface FeatureDeps {
   readonly readFeed: FeedReader;
   readonly gameDataStore: GameDataStore;
   readonly gameDataSource: GameDataSource;
+  readonly readChat: ChatReader;
+  readonly writeDigest: DigestWriter;
+  readonly drawIllustration: Illustrator;
+  readonly now: () => Date;
+  readonly logger: Pick<Logger, "info" | "error">;
   readonly readSpyglass: SpyglassReader;
   readonly dungeonStore: DungeonStore;
-  readonly logger: Pick<Logger, "info">;
 }
 
 export function createFeatureDeps(
   config: Config,
   db: Database,
   rest: REST,
-  logger: Pick<Logger, "info">,
+  logger: Pick<Logger, "info" | "error">,
 ): FeatureDeps {
   return {
     config,
@@ -64,6 +78,13 @@ export function createFeatureDeps(
     readFeed: readFeedOverHttp,
     gameDataStore: createGameDataStore(db),
     gameDataSource: createWagoSource({ fetch, product: foreverProduct }),
+    readChat: createDiscordChatReader({ rest, guildId: config.discord.guildId, logger }),
+    writeDigest: createClaudeWriter({
+      client: new Anthropic({ apiKey: config.anthropic.apiKey, maxRetries: 4 }),
+      logger,
+    }),
+    drawIllustration: createOpenAiIllustrator({ fetch, apiKey: config.openai.apiKey, logger }),
+    now: () => new Date(),
     readSpyglass: createSpyglassReader({ fetch }),
     dungeonStore: createDungeonStore(db),
   };
@@ -84,6 +105,16 @@ export function createFeatures(deps: FeatureDeps): Feature[] {
     createGameDataFeature({
       store: deps.gameDataStore,
       source: deps.gameDataSource,
+      logger: deps.logger,
+    }),
+    createDigestFeature({
+      channelIds: deps.config.digest.channelIds,
+      postChannelId: deps.config.digest.postChannelId,
+      readChat: deps.readChat,
+      write: deps.writeDigest,
+      draw: deps.drawIllustration,
+      publish: deps.publish,
+      now: deps.now,
       logger: deps.logger,
     }),
     createDungeonFeature({

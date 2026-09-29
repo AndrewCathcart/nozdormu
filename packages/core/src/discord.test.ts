@@ -1,7 +1,7 @@
 import { Routes } from "discord-api-types/v10";
 import type { REST } from "discord.js";
 import { describe, expect, it, vi } from "vitest";
-import { createRecentPostReader } from "./discord.ts";
+import { createChannelPublisher, createRecentPostReader } from "./discord.ts";
 
 const botUserId = "900000000000000009";
 const channelId = "300000000000000003";
@@ -43,5 +43,20 @@ describe("createRecentPostReader", () => {
     await expect(readRecentPosts(channelId)).rejects.toThrow("Discord is down");
 
     expect(await readRecentPosts(channelId)).toEqual(["Posted earlier"]);
+  });
+});
+
+describe("createChannelPublisher", () => {
+  it("posts the message in the channel, uploading any files with it", async () => {
+    const rest = { post: vi.fn<REST["post"]>().mockResolvedValue({}) } satisfies Pick<REST, "post">;
+
+    await createChannelPublisher(rest)(channelId, { content: "Made-up masthead" }, [
+      { name: "this-week.jpg", data: new Uint8Array([1, 2, 3]) },
+    ]);
+
+    expect(rest.post).toHaveBeenCalledExactlyOnceWith(Routes.channelMessages(channelId), {
+      body: { content: "Made-up masthead" },
+      files: [{ name: "this-week.jpg", data: new Uint8Array([1, 2, 3]) }],
+    });
   });
 });

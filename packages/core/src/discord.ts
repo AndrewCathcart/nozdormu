@@ -4,7 +4,7 @@ import {
   type RESTPostAPIChannelMessageJSONBody,
   type RESTPostAPIInteractionCallbackJSONBody,
 } from "discord-api-types/v10";
-import { type Client, Events, type REST } from "discord.js";
+import { type Client, Events, type RawFile, type REST } from "discord.js";
 import type { Logger } from "pino";
 import { z } from "zod";
 import type { GuildTarget } from "./command-registration.ts";
@@ -87,12 +87,19 @@ export function routeInteractions(
 
 export type ChannelMessage = RESTPostAPIChannelMessageJSONBody;
 
-// Posts a message in a channel through Discord's REST API.
-export type ChannelPublisher = (channelId: string, message: ChannelMessage) => Promise<void>;
+// Posts a message in a channel through Discord's REST API, uploading any files with it.
+export type ChannelPublisher = (
+  channelId: string,
+  message: ChannelMessage,
+  files?: readonly RawFile[],
+) => Promise<void>;
 
-export function createChannelPublisher(rest: REST): ChannelPublisher {
-  return async (channelId, message) => {
-    await rest.post(Routes.channelMessages(channelId), { body: message });
+export function createChannelPublisher(rest: Pick<REST, "post">): ChannelPublisher {
+  return async (channelId, message, files = []) => {
+    await rest.post(Routes.channelMessages(channelId), {
+      body: message,
+      files: [...files],
+    });
   };
 }
 

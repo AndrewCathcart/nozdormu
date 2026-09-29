@@ -1,7 +1,11 @@
 // Runs one scheduled job once, outside the scheduler, against the real feed and database.
 //   pnpm job <job-name>            does everything the job does, including posting to Discord
 //   pnpm job <job-name> --dry-run  prints what it would post or record, and changes nothing
-// A dry run prints the posts it would make to the terminal, never into the logs.
+// A dry run prints the posts it would make to the terminal, never into the logs, and saves any
+// pictures they carry to the system's temporary folder.
+import { writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createLogger } from "@nozdormu/core";
 import type { DungeonStore } from "@nozdormu/dungeons";
 import type { GameDataStore } from "@nozdormu/gamedata";
@@ -74,8 +78,16 @@ function dryRun(deps: FeatureDeps): FeatureDeps {
     seenVideos: readOnlySeenVideos(deps.seenVideos),
     gameDataStore: readOnlyGameData(deps.gameDataStore),
     dungeonStore: readOnlyDungeons(deps.dungeonStore),
-    publish: (channelId, message) => {
+    publish: (channelId, message, files = []) => {
       console.log(`\nDRY RUN: would post in channel ${channelId}:\n${message.content ?? ""}\n`);
+      for (const { name, data } of files) {
+        const path = join(tmpdir(), `nozdormu-dry-run-${name}`);
+        writeFileSync(
+          path,
+          typeof data === "string" || data instanceof Uint8Array ? data : String(data),
+        );
+        console.log(`DRY RUN: with ${name}, saved to ${path}\n`);
+      }
       return Promise.resolve();
     },
   };
