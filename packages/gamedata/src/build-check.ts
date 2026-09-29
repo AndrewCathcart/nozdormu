@@ -16,9 +16,13 @@ export interface GameDataSource {
 
 export interface BuildCheckDeps {
   readonly source: GameDataSource;
-  readonly store: Pick<GameDataStore, "importedVersion" | "replaceBuild">;
+  readonly store: Pick<GameDataStore, "importedBuild" | "replaceBuild">;
   readonly logger: Pick<Logger, "info">;
 }
+
+// Which version of the import this code does. Bump it when an import starts storing something new,
+// and the next check imports the current build again, even if it was imported before.
+export const importFormat = 2;
 
 // A build with fewer items or recipes than this is treated as a failed download. Forever has about
 // 19,000 items and 2,300 recipes.
@@ -34,7 +38,16 @@ function isForeverBuild(version: string): boolean {
 
 // Downloads a build's tables one at a time, to go easy on wago.tools, and reads them.
 async function download(source: GameDataSource, version: string): Promise<GameBuild> {
-  const table = (name: GameTable): Promise<string> => source.table(name, version);
+  // Every table the import reads has thousands of rows, so one with none is a failed download.
+  const table = async (name: GameTable): Promise<string> => {
+    const csv = await source.table(name, version);
+    if (!csv.trim().includes("\n")) {
+      throw new Error(
+        `wago.tools gave an empty ${name} table for build ${version}, so the stored game data was kept.`,
+      );
+    }
+    return csv;
+  };
   const items = parseItemSparse(await table("ItemSparse"));
   const itemIds = new Set(items.map((item) => item.id));
   const allRecipes = parseRecipes({
@@ -51,7 +64,7 @@ async function download(source: GameDataSource, version: string): Promise<GameBu
   const recipes = allRecipes
     .filter((recipe) => itemIds.has(recipe.itemId))
     .map((recipe) => ({ ...recipe, taughtBy: recipe.taughtBy.filter((id) => itemIds.has(id)) }));
-  return { version, items, recipes };
+  return { version, format: importFormat, items, recipes };
 }
 
 function tooFew(count: number, what: "items" | "recipes", version: string): Error {
@@ -73,7 +86,8 @@ export function createBuildCheckJob(deps: BuildCheckDeps): ScheduledJob {
       );
       return;
     }
-    if (latest === (await deps.store.importedVersion())) {
+    const imported = await deps.store.importedBuild();
+    if (imported?.version === latest && imported.format === importFormat) {
       return;
     }
     const startedAt = performance.now();

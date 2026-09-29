@@ -1,5 +1,5 @@
 {
-  "id": "4f8ec9fb-245c-4e91-8c55-7d1da22d4ec4",
+  "id": "b27e00fa-069e-4ccf-ad02-b5760123a520",
   "prevId": "8a7dfc70-b5dd-4a76-b187-33238113c6ae",
   "version": "7",
   "dialect": "postgresql",
@@ -65,6 +65,13 @@
           "type": "integer",
           "primaryKey": false,
           "notNull": true
+        },
+        "import_format": {
+          "name": "import_format",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
         },
         "imported_at": {
           "name": "imported_at",
@@ -270,13 +277,13 @@
           "name": "yellow_at",
           "type": "integer",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "grey_at": {
           "name": "grey_at",
           "type": "integer",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "taught_by": {
           "name": "taught_by",

@@ -15,8 +15,9 @@ function importBuild(
   version: string,
   items: ItemRecord[],
   recipes: RecipeRecord[] = [],
+  format = 2,
 ): Promise<void> {
-  return store.replaceBuild({ version, items, recipes });
+  return store.replaceBuild({ version, format, items, recipes });
 }
 
 // A made-up recipe making item 1 from items 2 and 3.
@@ -31,8 +32,7 @@ function recipe(spellId: number, name: string): RecipeRecord {
       { itemId: 3, count: 4 },
       { itemId: 2, count: 1 },
     ],
-    yellowAt: 50,
-    greyAt: 100,
+    skillLevels: { yellowAt: 50, greyAt: 100 },
     taughtBy: [5, 4],
   };
 }
@@ -49,6 +49,15 @@ describe("game data store", () => {
     );
 
     expect(await store.getRecipe(900_002)).toEqual(recipe(900_002, "Made-up Other Sword"));
+  });
+
+  it("keeps a recipe without skill levels", async () => {
+    const store = createGameDataStore(database.db);
+    const unlevelled = { ...recipe(900_001, "Made-up Stew"), skillLevels: undefined };
+
+    await importBuild(store, "1.60.1.1109", [], [unlevelled]);
+
+    expect(await store.getRecipe(900_001)).toEqual(unlevelled);
   });
 
   it("replaces the previous build's recipes", async () => {
@@ -84,12 +93,19 @@ describe("game data store", () => {
         spellId: 900_003,
         name: "Sword-shaped Made-up Charm",
         professions: ["Blacksmithing", "Leatherworking"],
+        skillLevels: { yellowAt: 50, greyAt: 100 },
       },
-      { spellId: 900_002, name: "Made-up Sword", professions: ["Blacksmithing", "Leatherworking"] },
+      {
+        spellId: 900_002,
+        name: "Made-up Sword",
+        professions: ["Blacksmithing", "Leatherworking"],
+        skillLevels: { yellowAt: 50, greyAt: 100 },
+      },
       {
         spellId: 900_001,
         name: "Made-up Sword of Plenty",
         professions: ["Blacksmithing", "Leatherworking"],
+        skillLevels: { yellowAt: 50, greyAt: 100 },
       },
     ]);
   });
@@ -160,12 +176,12 @@ describe("game data store", () => {
     expect(await store.getItem(2)).toEqual(item(2, "Made-up Helm"));
   });
 
-  it("records which build it imported", async () => {
+  it("records which build it imported, and the import's format", async () => {
     const store = createGameDataStore(database.db);
 
-    await importBuild(store, "1.60.1.1002", [item(1, "Made-up Sword")]);
+    await importBuild(store, "1.60.1.1002", [item(1, "Made-up Sword")], [], 7);
 
-    expect(await store.importedVersion()).toBe("1.60.1.1002");
+    expect(await store.importedBuild()).toEqual({ version: "1.60.1.1002", format: 7 });
   });
 
   it("replaces the previous build's items", async () => {
@@ -191,8 +207,8 @@ describe("game data store", () => {
       ]),
     ).rejects.toThrow("Failed query");
 
-    expect([await store.importedVersion(), await store.getItem(1)]).toEqual([
-      "1.60.1.1005",
+    expect([await store.importedBuild(), await store.getItem(1)]).toEqual([
+      { version: "1.60.1.1005", format: 2 },
       item(1, "Made-up Sword"),
     ]);
   });

@@ -15,7 +15,9 @@ const madeUpSword: ItemRecord = {
 
 function createFakeStore(stored: readonly ItemRecord[]) {
   return {
-    importedVersion: vi.fn<GameDataStore["importedVersion"]>().mockResolvedValue("1.60.1.70009"),
+    importedBuild: vi
+      .fn<GameDataStore["importedBuild"]>()
+      .mockResolvedValue({ version: "1.60.1.70009", format: 2 }),
     getItem: vi.fn<GameDataStore["getItem"]>((id) =>
       Promise.resolve(stored.find((item) => item.id === id)),
     ),
@@ -26,7 +28,7 @@ function createFakeStore(stored: readonly ItemRecord[]) {
           .slice(0, limit),
       ),
     ),
-  } satisfies Pick<GameDataStore, "importedVersion" | "getItem" | "searchItems">;
+  } satisfies Pick<GameDataStore, "importedBuild" | "getItem" | "searchItems">;
 }
 
 function invoke(name: string) {
@@ -158,7 +160,7 @@ describe("/item", () => {
 
   it("says the item data isn't loaded yet when no build has been imported", async () => {
     const items = createFakeStore([]);
-    items.importedVersion.mockResolvedValue(undefined);
+    items.importedBuild.mockResolvedValue(undefined);
     const command = createItemCommand(items);
 
     expect(await command.handle(invoke("sword"))).toEqual({

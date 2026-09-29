@@ -74,7 +74,14 @@ export function recipeTablesCsv(recipeCount: number): Record<RecipeTable, string
       reagentHeader,
       ...numbers.map((n) => reagentRow(n, 900_000 + n, [[270_500, 2]])),
     ]),
-    ItemEffect: csv([["ID", "TriggerType", "SpellID"]]),
-    ItemXItemEffect: csv([["ID", "ItemEffectID", "ItemID"]]),
+    // Item 270001 has an on-use effect (trigger 0), which teaches nothing.
+    ItemEffect: csv([
+      ["ID", "TriggerType", "SpellID"],
+      [1, 0, 483],
+    ]),
+    ItemXItemEffect: csv([
+      ["ID", "ItemEffectID", "ItemID"],
+      [1, 1, 270_001],
+    ]),
   };
 }

@@ -14,8 +14,7 @@ const transmute: RecipeRecord = {
     { itemId: 270_010, count: 1 },
     { itemId: 270_011, count: 2 },
   ],
-  yellowAt: 275,
-  greyAt: 290,
+  skillLevels: { yellowAt: 275, greyAt: 290 },
   taughtBy: [270_100],
 };
 
@@ -29,7 +28,9 @@ const madeUpItemNames = new Map([
 
 function createFakeStore(recipes: readonly RecipeRecord[]) {
   return {
-    importedVersion: vi.fn<GameDataStore["importedVersion"]>().mockResolvedValue("1.60.1.70009"),
+    importedBuild: vi
+      .fn<GameDataStore["importedBuild"]>()
+      .mockResolvedValue({ version: "1.60.1.70009", format: 2 }),
     getRecipe: vi.fn<GameDataStore["getRecipe"]>((spellId) =>
       Promise.resolve(recipes.find((recipe) => recipe.spellId === spellId)),
     ),
@@ -38,13 +39,18 @@ function createFakeStore(recipes: readonly RecipeRecord[]) {
         recipes
           .filter((recipe) => recipe.name.toLowerCase().includes(text.toLowerCase()))
           .slice(0, limit)
-          .map(({ spellId, name, professions }) => ({ spellId, name, professions })),
+          .map(({ spellId, name, professions, skillLevels }) => ({
+            spellId,
+            name,
+            professions,
+            skillLevels,
+          })),
       ),
     ),
     itemNames: vi.fn<GameDataStore["itemNames"]>((ids) =>
       Promise.resolve(new Map([...madeUpItemNames].filter(([id]) => ids.includes(id)))),
     ),
-  } satisfies Pick<GameDataStore, "importedVersion" | "getRecipe" | "searchRecipes" | "itemNames">;
+  } satisfies Pick<GameDataStore, "importedBuild" | "getRecipe" | "searchRecipes" | "itemNames">;
 }
 
 function invoke(name: string) {
@@ -70,7 +76,7 @@ describe("/recipe", () => {
   });
 
   it("leaves out reagents, skill levels and teachers the game data doesn't have", async () => {
-    const bare = { ...transmute, reagents: [], yellowAt: 0, greyAt: 0, taughtBy: [] };
+    const bare = { ...transmute, reagents: [], skillLevels: undefined, taughtBy: [] };
     const command = createRecipeCommand(createFakeStore([bare]));
 
     const reply = await command.handle(invoke("900001"));
@@ -134,12 +140,13 @@ describe("/recipe", () => {
     });
   });
 
-  it("suggests matching recipes, labelled with their professions, valued by their spell ID", async () => {
+  it("suggests matching recipes, labelled with their professions and where they turn yellow, valued by their spell ID", async () => {
     const suit = {
       ...transmute,
       spellId: 900_002,
       name: "Made-up Ogre Suit",
       professions: ["Tailoring", "Leatherworking"],
+      skillLevels: undefined,
     };
     const command = createRecipeCommand(createFakeStore([transmute, suit]));
 
@@ -150,7 +157,7 @@ describe("/recipe", () => {
     });
 
     expect(choices).toEqual([
-      { name: "Transmute: Made-up Metal (Alchemy)", value: "900001" },
+      { name: "Transmute: Made-up Metal (Alchemy, yellow at 275)", value: "900001" },
       { name: "Made-up Ogre Suit (Tailoring or Leatherworking)", value: "900002" },
     ]);
   });
@@ -171,7 +178,7 @@ describe("/recipe", () => {
 
   it("says the recipe data isn't loaded yet when no build has been imported", async () => {
     const store = createFakeStore([]);
-    store.importedVersion.mockResolvedValue(undefined);
+    store.importedBuild.mockResolvedValue(undefined);
     const command = createRecipeCommand(store);
 
     expect(await command.handle(invoke("metal"))).toEqual({

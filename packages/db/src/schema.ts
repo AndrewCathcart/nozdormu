@@ -43,9 +43,11 @@ export const youtubeVideos = pgTable(
 );
 
 // The game-data builds imported from wago.tools; the newest row is the build the items come from.
+// import_format is the version of the import code that stored it; rows from before it existed are 1.
 export const gameBuilds = pgTable("game_builds", {
   version: text("version").primaryKey(),
   itemCount: integer("item_count").notNull(),
+  importFormat: integer("import_format").notNull().default(1),
   importedAt: timestamp("imported_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -64,15 +66,15 @@ export const items = pgTable(
 );
 
 // Profession recipes, replaced wholesale with the items by each import. Keyed by the recipe's
-// spell. Skill levels are 0 where the game data has none.
+// spell. The skill levels are both null where the game data has none.
 export const recipes = pgTable("recipes", {
   spellId: integer("spell_id").primaryKey(),
   name: text("name").notNull(),
   professions: text("professions").array().notNull(),
   itemId: integer("item_id").notNull(),
   itemCount: integer("item_count").notNull(),
-  yellowAt: integer("yellow_at").notNull(),
-  greyAt: integer("grey_at").notNull(),
+  yellowAt: integer("yellow_at"),
+  greyAt: integer("grey_at"),
   // The recipe items that teach it.
   taughtBy: integer("taught_by").array().notNull(),
 });

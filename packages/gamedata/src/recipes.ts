@@ -11,6 +11,12 @@ export type RecipeTable =
   | "ItemEffect"
   | "ItemXItemEffect";
 
+// The skill levels where a recipe stops being orange and turns yellow, then grey.
+export interface SkillLevels {
+  readonly yellowAt: number;
+  readonly greyAt: number;
+}
+
 export interface Reagent {
   readonly itemId: number;
   readonly count: number;
@@ -25,9 +31,8 @@ export interface RecipeRecord {
   readonly itemId: number;
   readonly itemCount: number;
   readonly reagents: readonly Reagent[];
-  // The skill levels where the recipe stops being orange and turns yellow, then grey. 0 if unknown.
-  readonly yellowAt: number;
-  readonly greyAt: number;
+  // Undefined where the game data has none.
+  readonly skillLevels: SkillLevels | undefined;
   // Recipe items (patterns, plans, formulas...) that teach it.
   readonly taughtBy: readonly number[];
 }
@@ -177,8 +182,11 @@ export function parseRecipes(tables: Readonly<Record<RecipeTable, string>>): Rec
       // Like the game server, treat a count below 1 as 1.
       itemCount: Math.max(1, Math.round(made.EffectBasePointsF)),
       reagents: reagents.get(ability.Spell) ?? [],
-      yellowAt: ability.TrivialSkillLineRankLow,
-      greyAt: ability.TrivialSkillLineRankHigh,
+      // The game data has 0 for "none".
+      skillLevels:
+        ability.TrivialSkillLineRankHigh > 0
+          ? { yellowAt: ability.TrivialSkillLineRankLow, greyAt: ability.TrivialSkillLineRankHigh }
+          : undefined,
       taughtBy: teachers.get(ability.Spell) ?? [],
     });
   }

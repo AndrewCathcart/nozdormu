@@ -47,11 +47,20 @@ describe("parseRecipes", () => {
           { itemId: 270_010, count: 3 },
           { itemId: 270_011, count: 1 },
         ],
-        yellowAt: 50,
-        greyAt: 100,
+        skillLevels: { yellowAt: 50, greyAt: 100 },
         taughtBy: [],
       },
     ]);
+  });
+
+  it("has no skill levels where the game data has none", () => {
+    const recipes = parseRecipes(
+      tables({
+        SkillLineAbility: csv([skillLineAbilityHeader, [1, 164, 900_001, 0, 0]]),
+      }),
+    );
+
+    expect(recipes.map((recipe) => recipe.skillLevels)).toEqual([undefined]);
   });
 
   // The client stores 0 for recipes such as transmutes, which make one item.

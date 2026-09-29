@@ -1,10 +1,15 @@
 import type { Logger } from "@nozdormu/core";
 import { describe, expect, it, vi } from "vitest";
-import { createBuildCheckJob, type GameDataSource, type GameTable } from "./build-check.ts";
+import {
+  createBuildCheckJob,
+  type GameDataSource,
+  type GameTable,
+  importFormat,
+} from "./build-check.ts";
 import type { GameDataStore } from "./game-data-store.ts";
 import type { ItemRecord } from "./item-sparse.ts";
 import type { RecipeRecord, RecipeTable } from "./recipes.ts";
-import { csv, itemSparseCsv, recipeTablesCsv } from "./test-tables.ts";
+import { csv, itemSparseCsv, reagentHeader, recipeTablesCsv } from "./test-tables.ts";
 
 const firstSword: ItemRecord = {
   id: 270_001,
@@ -22,8 +27,7 @@ const firstSwordRecipe: RecipeRecord = {
   itemId: 270_001,
   itemCount: 1,
   reagents: [{ itemId: 270_500, count: 2 }],
-  yellowAt: 10,
-  greyAt: 20,
+  skillLevels: { yellowAt: 10, greyAt: 20 },
   taughtBy: [],
 };
 
@@ -38,15 +42,18 @@ function fakeTables(
     Promise.resolve(name === "ItemSparse" ? itemSparseCsv(itemCount) : recipeTables[name]);
 }
 
-// Downloads have 1,000 items and 1,000 recipes, the fewest the job accepts.
-function createDeps(latest: string, imported?: string) {
+// Downloads have 1,000 items and 1,000 recipes, the fewest the job accepts. The imported build, if
+// any, was stored by the current import code unless a format is given.
+function createDeps(latest: string, imported?: string, format = importFormat) {
   return {
     source: {
       latestBuild: vi.fn<GameDataSource["latestBuild"]>().mockResolvedValue(latest),
       table: vi.fn<GameDataSource["table"]>(fakeTables(1000, 1000)),
     },
     store: {
-      importedVersion: vi.fn<GameDataStore["importedVersion"]>().mockResolvedValue(imported),
+      importedBuild: vi
+        .fn<GameDataStore["importedBuild"]>()
+        .mockResolvedValue(imported === undefined ? undefined : { version: imported, format }),
       replaceBuild: vi.fn<GameDataStore["replaceBuild"]>().mockResolvedValue(undefined),
     },
     logger: { info: vi.fn<Logger["info"]>() } satisfies Pick<Logger, "info">,
@@ -139,6 +146,22 @@ describe("build check", () => {
     expect(deps.store.replaceBuild).not.toHaveBeenCalled();
   });
 
+  it("imports a build again when it was imported by an older version of the import", async () => {
+    const deps = createDeps("1.60.1.70009", "1.60.1.70009", importFormat - 1);
+
+    await createBuildCheckJob(deps).run();
+
+    expect(deps.store.replaceBuild.mock.calls[0]?.[0].version).toBe("1.60.1.70009");
+  });
+
+  it("records the import format with each build", async () => {
+    const deps = createDeps("1.60.1.70009", "1.60.1.69893");
+
+    await createBuildCheckJob(deps).run();
+
+    expect(deps.store.replaceBuild.mock.calls[0]?.[0].format).toBe(importFormat);
+  });
+
   it("ignores a build that isn't Forever's", async () => {
     const deps = createDeps("5.5.0.62071", "1.60.1.70009");
 
@@ -189,6 +212,19 @@ describe("build check", () => {
 
     await expect(createBuildCheckJob(deps).run()).rejects.toThrow(
       "wago.tools gave only 999 recipes for build 1.60.1.70009, so the stored game data was kept.",
+    );
+
+    expect(deps.store.replaceBuild).not.toHaveBeenCalled();
+  });
+
+  it("refuses a build with an empty table, keeping the stored data", async () => {
+    const deps = createDeps("1.60.1.70009", "1.60.1.69893");
+    deps.source.table.mockImplementation(
+      fakeTables(1000, 1000, { SpellReagents: csv([reagentHeader]) }),
+    );
+
+    await expect(createBuildCheckJob(deps).run()).rejects.toThrow(
+      "wago.tools gave an empty SpellReagents table for build 1.60.1.70009, so the stored game data was kept.",
     );
 
     expect(deps.store.replaceBuild).not.toHaveBeenCalled();

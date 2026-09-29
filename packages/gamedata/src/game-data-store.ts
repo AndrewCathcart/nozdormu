@@ -1,21 +1,28 @@
 import { type Database, gameBuilds, items, recipeReagents, recipes } from "@nozdormu/db";
 import { and, asc, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import type { ItemRecord } from "./item-sparse.ts";
-import type { RecipeRecord } from "./recipes.ts";
+import type { RecipeRecord, SkillLevels } from "./recipes.ts";
 
 // What a recipe suggestion shows.
-export type RecipeSummary = Pick<RecipeRecord, "spellId" | "name" | "professions">;
+export type RecipeSummary = Pick<RecipeRecord, "spellId" | "name" | "professions" | "skillLevels">;
 
 // Everything imported from one client build.
 export interface GameBuild {
   readonly version: string;
+  // Which version of the import code produced it (see importFormat in build-check.ts).
+  readonly format: number;
   readonly items: readonly ItemRecord[];
   readonly recipes: readonly RecipeRecord[];
 }
 
+export interface ImportedBuild {
+  readonly version: string;
+  readonly format: number;
+}
+
 export interface GameDataStore {
   // The build the stored data comes from, if any has been imported.
-  readonly importedVersion: () => Promise<string | undefined>;
+  readonly importedBuild: () => Promise<ImportedBuild | undefined>;
   // Replaces all the stored data with this build's, in one transaction.
   readonly replaceBuild: (build: GameBuild) => Promise<void>;
   readonly getItem: (id: number) => Promise<ItemRecord | undefined>;
@@ -52,15 +59,20 @@ function escapeLike(text: string): string {
   return text.replaceAll(/[\\%_]/g, (character) => `\\${character}`);
 }
 
+// The recipes table keeps both skill levels null where the game data has none.
+function skillLevelsOf(yellowAt: number | null, greyAt: number | null): SkillLevels | undefined {
+  return yellowAt === null || greyAt === null ? undefined : { yellowAt, greyAt };
+}
+
 export function createGameDataStore(db: Database): GameDataStore {
   return {
-    importedVersion: async () => {
+    importedBuild: async () => {
       const [build] = await db
-        .select({ version: gameBuilds.version })
+        .select({ version: gameBuilds.version, format: gameBuilds.importFormat })
         .from(gameBuilds)
         .orderBy(desc(gameBuilds.importedAt))
         .limit(1);
-      return build?.version;
+      return build;
     },
     replaceBuild: async (build) => {
       await db.transaction(async (tx) => {
@@ -69,9 +81,14 @@ export function createGameDataStore(db: Database): GameDataStore {
         await tx.delete(items);
         await insertInBatches(build.items, (batch) => tx.insert(items).values(batch));
         await insertInBatches(
-          build.recipes.map(({ reagents: _reagents, ...recipe }) => ({
-            ...recipe,
+          build.recipes.map((recipe) => ({
+            spellId: recipe.spellId,
+            name: recipe.name,
             professions: [...recipe.professions],
+            itemId: recipe.itemId,
+            itemCount: recipe.itemCount,
+            yellowAt: recipe.skillLevels?.yellowAt ?? null,
+            greyAt: recipe.skillLevels?.greyAt ?? null,
             taughtBy: [...recipe.taughtBy],
           })),
           (batch) => tx.insert(recipes).values(batch),
@@ -88,10 +105,18 @@ export function createGameDataStore(db: Database): GameDataStore {
         );
         await tx
           .insert(gameBuilds)
-          .values({ version: build.version, itemCount: build.items.length })
+          .values({
+            version: build.version,
+            itemCount: build.items.length,
+            importFormat: build.format,
+          })
           .onConflictDoUpdate({
             target: gameBuilds.version,
-            set: { itemCount: build.items.length, importedAt: sql`now()` },
+            set: {
+              itemCount: build.items.length,
+              importFormat: build.format,
+              importedAt: sql`now()`,
+            },
           });
       });
     },
@@ -129,12 +154,23 @@ export function createGameDataStore(db: Database): GameDataStore {
         .from(recipeReagents)
         .where(eq(recipeReagents.spellId, spellId))
         .orderBy(asc(recipeReagents.position));
-      return { ...found, reagents };
+      const { yellowAt, greyAt, ...recipe } = found;
+      return {
+        ...recipe,
+        skillLevels: skillLevelsOf(yellowAt, greyAt),
+        reagents,
+      };
     },
     searchRecipes: async (text, limit) => {
       const escaped = escapeLike(text);
-      return db
-        .select({ spellId: recipes.spellId, name: recipes.name, professions: recipes.professions })
+      const found = await db
+        .select({
+          spellId: recipes.spellId,
+          name: recipes.name,
+          professions: recipes.professions,
+          yellowAt: recipes.yellowAt,
+          greyAt: recipes.greyAt,
+        })
         .from(recipes)
         .leftJoin(items, eq(items.id, recipes.itemId))
         .where(
@@ -149,6 +185,10 @@ export function createGameDataStore(db: Database): GameDataStore {
           asc(recipes.name),
         )
         .limit(limit);
+      return found.map(({ yellowAt, greyAt, ...recipe }) => ({
+        ...recipe,
+        skillLevels: skillLevelsOf(yellowAt, greyAt),
+      }));
     },
   };
 }

@@ -12,9 +12,10 @@ CREATE TABLE "recipes" (
 	"professions" text[] NOT NULL,
 	"item_id" integer NOT NULL,
 	"item_count" integer NOT NULL,
-	"yellow_at" integer NOT NULL,
-	"grey_at" integer NOT NULL,
+	"yellow_at" integer,
+	"grey_at" integer,
 	"taught_by" integer[] NOT NULL
 );
 --> statement-breakpoint
+ALTER TABLE "game_builds" ADD COLUMN "import_format" integer DEFAULT 1 NOT NULL;--> statement-breakpoint
 ALTER TABLE "recipe_reagents" ADD CONSTRAINT "recipe_reagents_spell_id_recipes_spell_id_fk" FOREIGN KEY ("spell_id") REFERENCES "public"."recipes"("spell_id") ON DELETE cascade ON UPDATE no action;

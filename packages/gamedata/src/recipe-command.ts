@@ -20,9 +20,11 @@ function describeRecipe(recipe: RecipeRecord, itemNames: ReadonlyMap<number, str
           `Reagents: ${recipe.reagents.map((reagent) => `${String(reagent.count)} × ${itemName(reagent.itemId)}`).join(", ")}`,
         ]
       : []),
-    ...(recipe.greyAt > 0
-      ? [`Turns yellow at ${String(recipe.yellowAt)} and grey at ${String(recipe.greyAt)}`]
-      : []),
+    ...(recipe.skillLevels === undefined
+      ? []
+      : [
+          `Turns yellow at ${String(recipe.skillLevels.yellowAt)} and grey at ${String(recipe.skillLevels.greyAt)}`,
+        ]),
     ...(recipe.taughtBy.length > 0
       ? [`Taught by ${recipe.taughtBy.map(itemName).join(" or ")}`]
       : []),
@@ -34,7 +36,7 @@ function describeRecipe(recipe: RecipeRecord, itemNames: ReadonlyMap<number, str
 // /recipe: suggests recipes as you type the recipe's or the item's name, then shows the one you
 // pick: its profession, what it makes, its reagents and skill levels, and where it's taught.
 export function createRecipeCommand(
-  store: Pick<GameDataStore, "importedVersion" | "getRecipe" | "searchRecipes" | "itemNames">,
+  store: Pick<GameDataStore, "importedBuild" | "getRecipe" | "searchRecipes" | "itemNames">,
 ): SlashCommand {
   const find = async (value: string): Promise<RecipeRecord | undefined> => {
     const id = parseId(value);
@@ -64,7 +66,7 @@ export function createRecipeCommand(
       const text = typeof value === "string" ? value.trim() : "";
       const recipe = text === "" ? undefined : await find(text);
       if (recipe === undefined) {
-        return (await store.importedVersion()) === undefined ? notLoaded("recipe") : notFound;
+        return (await store.importedBuild()) === undefined ? notLoaded("recipe") : notFound;
       }
       const itemNames = await store.itemNames([
         recipe.itemId,
@@ -82,7 +84,11 @@ export function createRecipeCommand(
       return toChoices(
         found.map((recipe) => ({
           name: recipe.name,
-          label: recipe.professions.join(" or "),
+          label:
+            recipe.professions.join(" or ") +
+            (recipe.skillLevels === undefined
+              ? ""
+              : `, yellow at ${String(recipe.skillLevels.yellowAt)}`),
           value: String(recipe.spellId),
         })),
       );

@@ -78,7 +78,7 @@ function choiceLabel(item: ItemRecord): string {
 // /item: suggests items as you type their name, then shows the one you pick with its Wowhead link.
 // Discord's preview of the link shows the tooltip and where the item comes from.
 export function createItemCommand(
-  store: Pick<GameDataStore, "importedVersion" | "getItem" | "searchItems">,
+  store: Pick<GameDataStore, "importedBuild" | "getItem" | "searchItems">,
 ): SlashCommand {
   const find = async (value: string): Promise<ItemRecord | undefined> => {
     const id = parseId(value);
@@ -108,7 +108,7 @@ export function createItemCommand(
       const text = typeof value === "string" ? value.trim() : "";
       const item = text === "" ? undefined : await find(text);
       if (item === undefined) {
-        return (await store.importedVersion()) === undefined ? notLoaded("item") : notFound;
+        return (await store.importedBuild()) === undefined ? notLoaded("item") : notFound;
       }
       return {
         content: [
