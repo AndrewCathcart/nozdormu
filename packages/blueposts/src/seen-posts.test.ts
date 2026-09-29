@@ -10,13 +10,10 @@ function seenPost(id: number, createdAt: string) {
 
 // Each test uses its own feed, so tests don't see each other's posts.
 describe("seen post store", () => {
-  it("has no first check or baseline for a feed it hasn't checked", async () => {
+  it("has no history for a feed it hasn't checked", async () => {
     const store = createSeenPostStore(database.db);
 
-    expect(await store.history("never-checked")).toEqual({
-      firstCheckDone: false,
-      baseline: undefined,
-    });
+    expect(await store.history("never-checked")).toBeUndefined();
   });
 
   it("records the first check with the newest post's time as the baseline", async () => {
@@ -27,8 +24,7 @@ describe("seen post store", () => {
       seenPost(2, "2026-09-25T12:00:00Z"),
     ]);
 
-    expect(await store.history("first-check")).toEqual({
-      firstCheckDone: true,
+    expect(await store.history("first-check")).toStrictEqual({
       baseline: new Date("2026-09-25T12:00:00Z"),
     });
   });
@@ -46,10 +42,7 @@ describe("seen post store", () => {
 
     await store.recordFirstCheck("empty-first-check", []);
 
-    expect(await store.history("empty-first-check")).toEqual({
-      firstCheckDone: true,
-      baseline: undefined,
-    });
+    expect(await store.history("empty-first-check")).toStrictEqual({ baseline: undefined });
   });
 
   it("says which of some posts a feed has seen, ignoring other feeds'", async () => {

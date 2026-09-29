@@ -8,7 +8,7 @@ import type {
 import { describe, expect, it, vi } from "vitest";
 import { type BluePostsFeatureDeps, createBluePostsFeature } from "./feature.ts";
 import type { ForumReader, StaffPost } from "./forum.ts";
-import type { SeenPostStore } from "./seen-posts.ts";
+import type { FeedHistory, SeenPostStore } from "./seen-posts.ts";
 
 // Made up.
 const newsChannelId = "300000000000000007";
@@ -50,17 +50,17 @@ function checkFeed(name: string): void {
 // An in-memory SeenPostStore holding one feed's history, which fails for any other feed.
 function createFakeStore(state: FeedState | "never checked") {
   const ids = new Set(state === "never checked" ? [] : state.seen);
-  const baseline = state === "never checked" ? undefined : state.baseline;
-  let firstCheckDone = state !== "never checked";
+  let history: FeedHistory | undefined =
+    state === "never checked" ? undefined : { baseline: state.baseline };
   return {
     ids,
     history: vi.fn<SeenPostStore["history"]>((name) => {
       checkFeed(name);
-      return Promise.resolve({ firstCheckDone, baseline });
+      return Promise.resolve(history);
     }),
     recordFirstCheck: vi.fn<SeenPostStore["recordFirstCheck"]>((name, posts) => {
       checkFeed(name);
-      firstCheckDone = true;
+      history = { baseline: undefined };
       for (const seenPost of posts) {
         ids.add(seenPost.id);
       }
@@ -223,7 +223,7 @@ describe("createBluePostsFeature", () => {
     await pollJob(deps).run();
 
     expect(deps.publish).not.toHaveBeenCalled();
-    expect(deps.seenPosts.ids.has(2)).toBe(true);
+    expect(deps.seenPosts.ids).toEqual(new Set([1, 2]));
   });
 
   it("recognises a post it already posted after the topic was renamed", async () => {
@@ -274,7 +274,7 @@ describe("createBluePostsFeature", () => {
     await pollJob(deps).run();
 
     expect(deps.logger.info).toHaveBeenCalledExactlyOnceWith(
-      { event: "blueposts.posted", postId: 2 },
+      { event: "blueposts.posted", feed, postId: 2 },
       "Posted a Blizzard staff post",
     );
   });

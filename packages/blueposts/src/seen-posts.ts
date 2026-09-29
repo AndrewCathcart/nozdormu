@@ -6,9 +6,8 @@ export interface SeenPost {
   readonly createdAt: Date;
 }
 
-// What the news channel remembers about a staff-post feed.
+// What the news channel remembers about a staff-post feed it has checked.
 export interface FeedHistory {
-  readonly firstCheckDone: boolean;
   // The newest post's time at the first check, if it had any posts. An unseen post no newer than
   // this was already there (or has resurfaced after a newer one was deleted), so it isn't news.
   readonly baseline: Date | undefined;
@@ -16,7 +15,8 @@ export interface FeedHistory {
 
 // The staff posts each feed has seen: posted, or already there at the first check.
 export interface SeenPostStore {
-  readonly history: (feed: string) => Promise<FeedHistory>;
+  // Undefined if the feed has never been checked.
+  readonly history: (feed: string) => Promise<FeedHistory | undefined>;
   // Marks the feed as checked and records the posts already on it, in one transaction.
   readonly recordFirstCheck: (feed: string, posts: readonly SeenPost[]) => Promise<void>;
   // Which of these posts the feed has seen.
@@ -43,7 +43,7 @@ export function createSeenPostStore(db: Database): SeenPostStore {
         .select({ baseline: bluePostFeeds.baselineCreatedAt })
         .from(bluePostFeeds)
         .where(eq(bluePostFeeds.feed, feed));
-      return { firstCheckDone: row !== undefined, baseline: row?.baseline ?? undefined };
+      return row === undefined ? undefined : { baseline: row.baseline ?? undefined };
     },
     recordFirstCheck: async (feed, posts) => {
       await db.transaction(async (tx) => {

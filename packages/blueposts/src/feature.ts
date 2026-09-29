@@ -39,7 +39,7 @@ export function createBluePostsFeature(deps: BluePostsFeatureDeps): Feature {
   const poll = async (): Promise<void> => {
     const posts = await deps.readPosts();
     const history = await deps.seenPosts.history(feed);
-    if (!history.firstCheckDone) {
+    if (history === undefined) {
       await deps.seenPosts.recordFirstCheck(feed, posts);
       deps.logger.info(
         { event: "blueposts.first_check", feed, posts: posts.length },
@@ -105,7 +105,7 @@ export function createBluePostsFeature(deps: BluePostsFeatureDeps): Feature {
       }
       if (!wasPosted) {
         deps.logger.info(
-          { event: "blueposts.posted", postId: post.id },
+          { event: "blueposts.posted", feed, postId: post.id },
           "Posted a Blizzard staff post",
         );
       }

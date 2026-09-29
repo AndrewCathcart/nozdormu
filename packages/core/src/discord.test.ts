@@ -112,7 +112,10 @@ describe("createChannelPublisher", () => {
     await expect(publish(channelId, { content: "First" })).rejects.toThrow("Discord is down");
     const second = publish(channelId, { content: "Second" });
     await vi.advanceTimersByTimeAsync(1_500);
+    await second;
 
-    await expect(second).resolves.toBeUndefined();
+    expect(rest.post).toHaveBeenLastCalledWith(Routes.channelMessages(channelId), {
+      body: { content: "Second" },
+    });
   });
 });

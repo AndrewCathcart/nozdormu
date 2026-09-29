@@ -1,4 +1,11 @@
 import {
+  createBluePostsFeature,
+  createForumReader,
+  createSeenPostStore,
+  type ForumReader,
+  type SeenPostStore,
+} from "@nozdormu/blueposts";
+import {
   type ChannelPublisher,
   createChannelPublisher,
   createRecentPostReader,
@@ -8,13 +15,6 @@ import {
   type ScheduledJob,
 } from "@nozdormu/core";
 import type { Database } from "@nozdormu/db";
-import {
-  createBluePostsFeature,
-  createForumReader,
-  createSeenPostStore,
-  type ForumReader,
-  type SeenPostStore,
-} from "@nozdormu/blueposts";
 import {
   createGameDataFeature,
   createGameDataStore,
@@ -33,6 +33,10 @@ import {
 } from "@nozdormu/youtube";
 import type { REST } from "discord.js";
 import type { Config } from "./config.ts";
+
+// The forum whose staff posts go in the Forever news channel, and the feed name its seen posts
+// are stored under.
+const euForums = { address: "https://eu.forums.blizzard.com/en/wow", feed: "eu-forums" };
 
 // What the features need from the outside world. The bot passes the real ones; `pnpm job
 // --dry-run` swaps in versions that print instead of posting or writing.
@@ -64,7 +68,7 @@ export function createFeatureDeps(
     readFeed: readFeedOverHttp,
     gameDataStore: createGameDataStore(db),
     gameDataSource: createWagoSource({ fetch, product: foreverProduct }),
-    readStaffPosts: createForumReader({ fetch, forum: "https://eu.forums.blizzard.com/en/wow" }),
+    readStaffPosts: createForumReader({ fetch, forum: euForums.address }),
     seenStaffPosts: createSeenPostStore(db),
   };
 }
@@ -88,7 +92,7 @@ export function createFeatures(deps: FeatureDeps): Feature[] {
     }),
     createBluePostsFeature({
       newsChannelId: deps.config.foreverNews.channelId,
-      feed: "eu-forums",
+      feed: euForums.feed,
       readPosts: deps.readStaffPosts,
       seenPosts: deps.seenStaffPosts,
       publish: deps.publish,

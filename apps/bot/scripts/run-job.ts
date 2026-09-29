@@ -2,8 +2,8 @@
 //   pnpm job <job-name>            does everything the job does, including posting to Discord
 //   pnpm job <job-name> --dry-run  prints what it would post or record, and changes nothing
 // A dry run prints the posts it would make to the terminal, never into the logs.
-import { type ChannelMessage, createLogger } from "@nozdormu/core";
 import type { SeenPostStore } from "@nozdormu/blueposts";
+import { type ChannelMessage, createLogger } from "@nozdormu/core";
 import type { GameDataStore } from "@nozdormu/gamedata";
 import type { SeenVideoStore } from "@nozdormu/youtube";
 import { REST } from "discord.js";
