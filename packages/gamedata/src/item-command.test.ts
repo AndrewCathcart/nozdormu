@@ -108,6 +108,22 @@ describe("/item", () => {
     ]);
   });
 
+  it("names the slot of ammunition and quivers", async () => {
+    const arrows = { ...madeUpSword, id: 270006, quality: 1, slot: "INVTYPE_AMMO" };
+    const quiver = { ...madeUpSword, id: 270007, quality: 1, slot: "INVTYPE_QUIVER" };
+    const command = createItemCommand(createFakeStore([arrows, quiver]));
+
+    const replies = [
+      await command.handle(invoke("270006")),
+      await command.handle(invoke("270007")),
+    ];
+
+    expect(replies.map((reply) => reply.embeds?.[0]?.description)).toEqual([
+      "Common Ammo · item level 42 · requires level 37",
+      "Common Quiver · item level 42 · requires level 37",
+    ]);
+  });
+
   it("leaves out the slot of an item you can't equip", async () => {
     const reagent = { ...madeUpSword, id: 270002, quality: 1, slot: "INVTYPE_NON_EQUIP" };
     const command = createItemCommand(createFakeStore([reagent]));

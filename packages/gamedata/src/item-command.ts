@@ -10,28 +10,17 @@ import type { ItemEntry } from "./item-entry.ts";
 import { itemKind, itemStats } from "./item-text.ts";
 import { notLoaded, parseId, toChoices } from "./lookup.ts";
 
-const qualityNames: Readonly<Record<number, string>> = {
-  0: "Poor",
-  1: "Common",
-  2: "Uncommon",
-  3: "Rare",
-  4: "Epic",
-  5: "Legendary",
-  6: "Artifact",
-  7: "Heirloom",
-};
-
-// Each quality's colour, as the game shows item names.
-const qualityColours: Readonly<Record<number, number>> = {
-  0: 0x9d_9d_9d,
-  1: 0xff_ff_ff,
-  2: 0x1e_ff_00,
-  3: 0x00_70_dd,
-  4: 0xa3_35_ee,
-  5: 0xff_80_00,
-  6: 0xe6_cc_80,
-  7: 0x00_cc_ff,
-};
+// Each quality's name, and its colour as the game shows item names.
+const qualities: ReadonlyMap<number, { readonly name: string; readonly colour: number }> = new Map([
+  [0, { name: "Poor", colour: 0x9d_9d_9d }],
+  [1, { name: "Common", colour: 0xff_ff_ff }],
+  [2, { name: "Uncommon", colour: 0x1e_ff_00 }],
+  [3, { name: "Rare", colour: 0x00_70_dd }],
+  [4, { name: "Epic", colour: 0xa3_35_ee }],
+  [5, { name: "Legendary", colour: 0xff_80_00 }],
+  [6, { name: "Artifact", colour: 0xe6_cc_80 }],
+  [7, { name: "Heirloom", colour: 0x00_cc_ff }],
+]);
 
 const notFound: CommandReply = {
   content: "I couldn't find that item. Start typing its name and pick one of the suggestions.",
@@ -41,7 +30,7 @@ const notFound: CommandReply = {
 // "Rare Leather Waist": the quality, then where it's worn and what kind it is, if it can be
 // equipped. Only a scanned item says what kind it is.
 function describeKind(item: ItemEntry): string {
-  return [qualityNames[item.quality], itemKind(item.scanned ?? item)]
+  return [qualities.get(item.quality)?.name, itemKind(item.slot, item.scanned)]
     .filter((part) => part !== undefined)
     .join(" ");
 }
@@ -105,8 +94,8 @@ export function createItemCommand(
           {
             title: escapeMarkdown(item.name),
             url: `https://www.wowhead.com/forever/item=${String(item.id)}`,
-            // Common white for a quality the game doesn't have.
-            color: qualityColours[item.quality] ?? 0xff_ff_ff,
+            // Common white for a quality with no name here.
+            color: qualities.get(item.quality)?.colour ?? 0xff_ff_ff,
             description: [describeItem(item), ...(stats === "" ? [] : [stats])].join("\n"),
           },
         ],

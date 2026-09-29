@@ -6,14 +6,13 @@ import {
   recipeReagents,
   recipes,
   scannedItems,
-  scannedItemStats,
 } from "@nozdormu/db";
 import { and, asc, desc, eq, gt, ilike, inArray, min, or, sql } from "drizzle-orm";
 import type { ClassSpell } from "./class-spells.ts";
 import { type ItemEntry, itemEntry } from "./item-entry.ts";
 import type { ItemRecord } from "./item-sparse.ts";
 import type { Reagent, RecipeRecord, RecipeResult, SkillLevels } from "./recipes.ts";
-import type { ScannedItem } from "./scanned-item.ts";
+import { readScannedItems, type ScannedItem } from "./scanned-item.ts";
 
 export interface ImportedBuild {
   readonly version: string;
@@ -110,32 +109,8 @@ function startsWith(name: string, text: string): boolean {
 }
 
 export function createGameDataStore(db: Database): GameDataStore {
-  // The scanned details of these items, by ID. The dungeon sync stores them.
-  const scannedById = async (ids: readonly number[]): Promise<Map<number, ScannedItem>> => {
-    if (ids.length === 0) {
-      return new Map();
-    }
-    const found = await db
-      .select()
-      .from(scannedItems)
-      .where(inArray(scannedItems.id, [...ids]));
-    const stats = await db
-      .select()
-      .from(scannedItemStats)
-      .where(inArray(scannedItemStats.itemId, [...ids]))
-      .orderBy(asc(scannedItemStats.position));
-    return new Map(
-      found.map((row) => [
-        row.id,
-        {
-          ...row,
-          stats: stats
-            .filter((stat) => stat.itemId === row.id)
-            .map(({ stat, value }) => ({ stat, value })),
-        },
-      ]),
-    );
-  };
+  const scannedById = (ids: readonly number[]): Promise<Map<number, ScannedItem>> =>
+    readScannedItems(db, ids);
 
   return {
     importedBuild: async () => {

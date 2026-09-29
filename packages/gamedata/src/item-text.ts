@@ -28,6 +28,8 @@ const slots: ReadonlyMap<string, string> = new Map([
   ["INVTYPE_RELIC", "Relic"],
   ["INVTYPE_TABARD", "Tabard"],
   ["INVTYPE_BAG", "Bag"],
+  ["INVTYPE_AMMO", "Ammo"],
+  ["INVTYPE_QUIVER", "Quiver"],
 ]);
 
 // The game's item class for armour, and its subclasses for the kinds that limit who can wear it.
@@ -69,27 +71,27 @@ const rangedSlots: ReadonlySet<string> = new Set([
   "INVTYPE_THROWN",
 ]);
 
-// Where an item is worn and what kind it is, such as "Leather Waist", "One-Hand Dagger" or "Bow".
-// Cloaks are all cloth, so the game doesn't say so, and nor does this.
+// Where an item is worn and what kind it is, such as "Leather Waist", "One-Hand Dagger" or "Bow",
+// from the game's name for the slot and, where known (an item scanned), its class and subclass.
+// Without them, just the slot. Cloaks are all cloth, so the game doesn't say so, and nor does this.
 export function itemKind(
-  item: Pick<ScannedItem, "slot"> & Partial<Pick<ScannedItem, "itemClass" | "itemSubclass">>,
+  gameSlot: string,
+  classes: Pick<ScannedItem, "itemClass" | "itemSubclass"> | undefined,
 ): string | undefined {
-  const slot = slots.get(item.slot);
-  if (item.itemClass === weaponClass) {
-    const kind = item.itemSubclass === undefined ? undefined : weaponKinds.get(item.itemSubclass);
-    if (kind === undefined || slot === undefined) {
-      return kind ?? slot;
+  const slot = slots.get(gameSlot);
+  if (classes?.itemClass === weaponClass) {
+    const weapon = weaponKinds.get(classes.itemSubclass);
+    if (weapon === undefined || slot === undefined) {
+      return weapon ?? slot;
     }
-    return rangedSlots.has(item.slot) ? kind : `${slot} ${kind}`;
+    return rangedSlots.has(gameSlot) ? weapon : `${slot} ${weapon}`;
   }
-  const kind =
-    item.itemClass === armourClass && item.itemSubclass !== undefined
-      ? armourKinds.get(item.itemSubclass)
-      : undefined;
-  if (slot === undefined || kind === undefined || item.slot === "INVTYPE_CLOAK") {
+  const armour =
+    classes?.itemClass === armourClass ? armourKinds.get(classes.itemSubclass) : undefined;
+  if (slot === undefined || armour === undefined || gameSlot === "INVTYPE_CLOAK") {
     return slot;
   }
-  return `${kind} ${slot}`;
+  return `${armour} ${slot}`;
 }
 
 // Short names players use for the main stats, and plain names for the others the game's names
@@ -211,8 +213,6 @@ function statRank({ stat }: ItemStat): number {
   return rank === -1 ? statOrder.length : rank;
 }
 
-// An item's slot, kind and stats, such as "Leather Waist · +4 Sta, +2 Spi", leaving out what it
-// doesn't have.
 // An item's stats as players write them, in the tooltip's order: "37 Armor, +4 Sta".
 export function itemStats(stats: readonly ItemStat[]): string {
   // The game names each resistance two ways, such as "NATURE_RESISTANCE" and "RESISTANCE3_NAME",
@@ -222,8 +222,10 @@ export function itemStats(stats: readonly ItemStat[]): string {
   ].join(", ");
 }
 
+// An item's slot, kind and stats, such as "Leather Waist · +4 Sta, +2 Spi", leaving out what it
+// doesn't have.
 export function itemDetails(item: ScannedItem): string {
-  return [itemKind(item), itemStats(item.stats)]
+  return [itemKind(item.slot, item), itemStats(item.stats)]
     .filter((part) => part !== undefined && part !== "")
     .join(" · ");
 }
