@@ -33,8 +33,12 @@ function byCreationTime(a: StaffPost, b: StaffPost): number {
   return a.createdAt.getTime() - b.createdAt.getTime();
 }
 
+// How many of the Forever posts already on the forum the first check posts, so the news channel
+// starts with something in it.
+const postedAtFirstCheck = 3;
+
 // Posts each new Blizzard staff forum post about Forever in the news channel. The first check
-// records what's already there without posting it. A post is recorded only after it's posted, so a
+// posts the latest few already there and records the rest without posting them. A post is recorded only after it's posted, so a
 // failed one is tried again at the next check; before posting, the bot looks for the post's link
 // among its own recent messages, so one posted just before a crash isn't repeated.
 export function createBluePostsFeature(deps: BluePostsFeatureDeps): Feature {
@@ -49,14 +53,25 @@ export function createBluePostsFeature(deps: BluePostsFeatureDeps): Feature {
     const posts = [
       ...new Map(pages.flatMap((page) => page.posts).map((post) => [post.id, post])).values(),
     ];
-    const history = await deps.seenPosts.history(feed);
+    let history = await deps.seenPosts.history(feed);
+    const firstCheck = history === undefined;
     if (history === undefined) {
-      await deps.seenPosts.recordFirstCheck(feed, posts);
+      // Everything older than the latest few Forever posts counts as already there. Those few are
+      // then new, and get posted below like any other.
+      const [oldestPosted] = posts
+        .filter(isAboutForever)
+        .toSorted(byCreationTime)
+        .slice(-postedAtFirstCheck);
+      const alreadyThere =
+        oldestPosted === undefined
+          ? posts
+          : posts.filter((post) => post.createdAt < oldestPosted.createdAt);
+      await deps.seenPosts.recordFirstCheck(feed, alreadyThere);
       deps.logger.info(
-        { event: "blueposts.first_check", feed, posts: posts.length },
-        "Recorded the staff posts already on the forum without posting them",
+        { event: "blueposts.first_check", feed, posts: alreadyThere.length },
+        "Recorded the older staff posts already on the forum without posting them",
       );
-      return;
+      history = (await deps.seenPosts.history(feed)) ?? { baseline: undefined };
     }
     const seen = await deps.seenPosts.seenIds(
       feed,
@@ -64,7 +79,8 @@ export function createBluePostsFeature(deps: BluePostsFeatureDeps): Feature {
     );
     // Each group's page shows only its latest posts. If none of them was seen before, more arrived
     // since the last check than it shows, perhaps while the bot was down.
-    for (const page of pages) {
+    // At the first check, the latest posts are unseen on purpose.
+    for (const page of firstCheck ? [] : pages) {
       if (page.posts.length > 0 && page.posts.every((post) => !seen.has(post.id))) {
         deps.logger.warn(
           { event: "blueposts.gap", feed, group: page.group, posts: page.posts.length },

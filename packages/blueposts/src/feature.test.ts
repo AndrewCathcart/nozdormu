@@ -63,7 +63,9 @@ function createFakeStore(state: FeedState | "never checked") {
     }),
     recordFirstCheck: vi.fn<SeenPostStore["recordFirstCheck"]>((name, posts) => {
       checkFeed(name);
-      history = { baseline: undefined };
+      // As the real store does: the newest post recorded is the baseline.
+      const times = posts.map((seenPost) => seenPost.createdAt.getTime());
+      history = { baseline: times.length === 0 ? undefined : new Date(Math.max(...times)) };
       for (const seenPost of posts) {
         ids.add(seenPost.id);
       }
@@ -125,16 +127,50 @@ describe("createBluePostsFeature", () => {
     });
   });
 
-  it("records the posts already there at the first check, without posting them", async () => {
-    const deps = createDeps([post(3), post(2)], "never checked");
+  it("posts the latest three Forever posts at the first check, oldest first", async () => {
+    const deps = createDeps([post(5), post(4), post(3), post(2), post(1)], "never checked");
 
     await pollJob(deps).run();
 
-    expect(deps.publish).not.toHaveBeenCalled();
+    expect(postedUrls(deps)).toEqual([post(3).url, post(4).url, post(5).url]);
+  });
+
+  it("records the older posts at the first check without posting them", async () => {
+    const deps = createDeps([post(5), post(4), post(3), post(2), post(1)], "never checked");
+
+    await pollJob(deps).run();
+
     expect(deps.seenPosts.recordFirstCheck).toHaveBeenCalledExactlyOnceWith(feed, [
-      post(3),
       post(2),
+      post(1),
     ]);
+    expect(deps.seenPosts.ids).toEqual(new Set([1, 2, 3, 4, 5]));
+  });
+
+  it("counts only Forever posts among the latest three at the first check", async () => {
+    const retail = { forum: { name: "General Discussion", parent: undefined } };
+    const deps = createDeps(
+      [post(6, retail), post(5), post(4), post(3), post(2), post(1)],
+      "never checked",
+    );
+
+    await pollJob(deps).run();
+
+    expect(postedUrls(deps)).toEqual([post(3).url, post(4).url, post(5).url]);
+  });
+
+  it("doesn't warn of missed posts at the first check, though the latest are unseen", async () => {
+    // The developers' page shows only posts the first check is about to post.
+    const deps = { ...createDeps([], "never checked"), groups: [staff, developers] };
+    deps.readPosts.mockImplementation((group) =>
+      Promise.resolve(
+        group === developers ? [post(5), post(4)] : [post(5), post(4), post(3), post(2), post(1)],
+      ),
+    );
+
+    await pollJob(deps).run();
+
+    expect(deps.logger.warn).not.toHaveBeenCalled();
   });
 
   it("posts each new Forever post in the news channel, oldest first, and records it", async () => {
