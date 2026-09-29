@@ -8,6 +8,7 @@
   },
   "dependencies": {
     "discord-api-types": "catalog:",
+    "discord.js": "catalog:",
     "pino": "catalog:"
   }
 }

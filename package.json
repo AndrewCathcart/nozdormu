@@ -3,6 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "dev": "pnpm --filter @nozdormu/bot dev",
+    "start": "pnpm --filter @nozdormu/bot start",
+    "smoke": "pnpm --filter @nozdormu/bot smoke",
     "prepare": "lefthook install",
     "check": "pnpm fmt:check && pnpm lint && pnpm typecheck && pnpm test",
     "fmt": "oxfmt",
