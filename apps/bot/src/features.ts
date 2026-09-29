@@ -1,5 +1,12 @@
 import Anthropic from "@anthropic-ai/sdk";
 import {
+  createBluePostsFeature,
+  createForumReader,
+  createSeenPostStore,
+  type ForumReader,
+  type SeenPostStore,
+} from "@nozdormu/blueposts";
+import {
   type ChannelPublisher,
   createChannelPublisher,
   createRecentPostReader,
@@ -44,6 +51,15 @@ import {
 import type { REST } from "discord.js";
 import type { Config } from "./config.ts";
 
+// The forum whose staff posts go in the Forever news channel, the feed name its seen posts are
+// stored under, and the staff groups whose posts are read: its Blizzard tracker, and its developers,
+// most of whom the tracker leaves out.
+const euForums = {
+  address: "https://eu.forums.blizzard.com/en/wow",
+  feed: "eu-forums",
+  groups: ["blizzard-tracker", "wow-developer"],
+};
+
 // What the features need from the outside world. The bot passes the real ones; `pnpm job
 // --dry-run` swaps in versions that print instead of posting or writing.
 export interface FeatureDeps {
@@ -58,7 +74,9 @@ export interface FeatureDeps {
   readonly writeDigest: DigestWriter;
   readonly drawIllustration: Illustrator;
   readonly now: () => Date;
-  readonly logger: Pick<Logger, "info" | "error">;
+  readonly readStaffPosts: ForumReader;
+  readonly seenStaffPosts: SeenPostStore;
+  readonly logger: Pick<Logger, "info" | "warn" | "error">;
   readonly readSpyglass: SpyglassReader;
   readonly dungeonStore: DungeonStore;
 }
@@ -67,7 +85,7 @@ export function createFeatureDeps(
   config: Config,
   db: Database,
   rest: REST,
-  logger: Pick<Logger, "info" | "error">,
+  logger: Pick<Logger, "info" | "warn" | "error">,
 ): FeatureDeps {
   return {
     config,
@@ -85,6 +103,8 @@ export function createFeatureDeps(
     }),
     drawIllustration: createOpenAiIllustrator({ fetch, apiKey: config.openai.apiKey, logger }),
     now: () => new Date(),
+    readStaffPosts: createForumReader({ fetch, forum: euForums.address }),
+    seenStaffPosts: createSeenPostStore(db),
     readSpyglass: createSpyglassReader({ fetch }),
     dungeonStore: createDungeonStore(db),
   };
@@ -115,6 +135,16 @@ export function createFeatures(deps: FeatureDeps): Feature[] {
       draw: deps.drawIllustration,
       publish: deps.publish,
       now: deps.now,
+      logger: deps.logger,
+    }),
+    createBluePostsFeature({
+      newsChannelId: deps.config.foreverNews.channelId,
+      feed: euForums.feed,
+      groups: euForums.groups,
+      readPosts: deps.readStaffPosts,
+      seenPosts: deps.seenStaffPosts,
+      publish: deps.publish,
+      recentPosts: deps.recentPosts,
       logger: deps.logger,
     }),
     createDungeonFeature({

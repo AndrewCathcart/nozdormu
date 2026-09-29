@@ -65,6 +65,33 @@ describe("serializeError", () => {
     });
   });
 
+  it("includes each error an aggregate error gathers, made safe the same way", () => {
+    const failure = new DiscordAPIError(
+      { code: 50013, message: "Missing Permissions" },
+      50013,
+      403,
+      "POST",
+      "https://discord.com/api/v10/channels/300000000000000003/messages",
+      { body: { content: "Made-up post" } },
+    );
+    const error = new AggregateError([failure], "Couldn't post 1 staff post(s).");
+
+    expect(serializeError(error)).toEqual({
+      type: "AggregateError",
+      message: "Couldn't post 1 staff post(s).",
+      stack: error.stack,
+      errors: [
+        {
+          type: "DiscordAPIError[50013]",
+          message: "Missing Permissions",
+          stack: failure.stack,
+          status: 403,
+          code: 50013,
+        },
+      ],
+    });
+  });
+
   it("stops at a cause that loops back to an error already serialized", () => {
     const error = new Error("Loops");
     error.cause = error;

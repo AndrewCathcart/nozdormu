@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "catalog:",
+    "@nozdormu/blueposts": "workspace:*",
     "@nozdormu/core": "workspace:*",
     "@nozdormu/db": "workspace:*",
     "@nozdormu/digest": "workspace:*",

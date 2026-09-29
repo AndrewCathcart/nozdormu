@@ -94,21 +94,44 @@ export type ChannelPublisher = (
   files?: readonly RawFile[],
 ) => Promise<void>;
 
+// Discord allows about 5 messages per 5 seconds in a channel. Posts go out one at a time with this
+// gap after each, so a batch (say, several staff posts after downtime) never bursts.
+const postGapMs = 1_500;
+
+function pause(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, postGapMs));
+}
+
 export function createChannelPublisher(rest: Pick<REST, "post">): ChannelPublisher {
+  let ready = Promise.resolve();
   return async (channelId, message, files = []) => {
-    await rest.post(Routes.channelMessages(channelId), {
-      body: message,
-      files: [...files],
-    });
+    const posted = ready.then(() =>
+      rest.post(Routes.channelMessages(channelId), {
+        body: message,
+        ...(files.length > 0 ? { files: [...files] } : {}),
+      }),
+    );
+    ready = posted.then(pause, pause);
+    await posted;
   };
 }
 
-// Reads the text of the bot's own messages among a channel's most recent 50.
-export type RecentPostReader = (channelId: string) => Promise<readonly string[]>;
+// One of the bot's own messages: its text, and the links of its cards.
+export interface RecentPost {
+  readonly content: string;
+  readonly embedUrls: readonly string[];
+}
+
+// Reads the bot's own messages among a channel's most recent 50.
+export type RecentPostReader = (channelId: string) => Promise<readonly RecentPost[]>;
 
 const currentUser = z.object({ id: z.string() });
 const recentMessages = z.array(
-  z.object({ author: z.object({ id: z.string() }), content: z.string() }),
+  z.object({
+    author: z.object({ id: z.string() }),
+    content: z.string(),
+    embeds: z.array(z.object({ url: z.string().optional() })),
+  }),
 );
 
 export function createRecentPostReader(rest: Pick<REST, "get">): RecentPostReader {
@@ -129,6 +152,9 @@ export function createRecentPostReader(rest: Pick<REST, "get">): RecentPostReade
     return recentMessages
       .parse(messages)
       .filter((message) => message.author.id === me)
-      .map((message) => message.content);
+      .map((message) => ({
+        content: message.content,
+        embedUrls: message.embeds.flatMap((embed) => (embed.url === undefined ? [] : [embed.url])),
+      }));
   };
 }

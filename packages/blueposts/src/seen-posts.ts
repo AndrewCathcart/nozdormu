@@ -1,0 +1,80 @@
+import { bluePostFeeds, bluePosts, type Database } from "@nozdormu/db";
+import { and, eq, inArray } from "drizzle-orm";
+
+export interface SeenPost {
+  readonly id: number;
+  readonly createdAt: Date;
+}
+
+// What the news channel remembers about a staff-post feed it has checked.
+export interface FeedHistory {
+  // Set at the first check. An unseen post no newer than this was already there (or has
+  // resurfaced after a newer one was deleted), so it isn't news.
+  readonly baseline: Date | undefined;
+}
+
+// The staff posts each feed has seen: posted, or already there at the first check.
+export interface SeenPostStore {
+  // Undefined if the feed has never been checked.
+  readonly history: (feed: string) => Promise<FeedHistory | undefined>;
+  // Marks the feed as checked with this baseline and records the posts already on it, in one
+  // transaction.
+  readonly recordFirstCheck: (
+    feed: string,
+    posts: readonly SeenPost[],
+    baseline: Date | undefined,
+  ) => Promise<void>;
+  // Which of these posts the feed has seen.
+  readonly seenIds: (feed: string, postIds: readonly number[]) => Promise<Set<number>>;
+  readonly markSeen: (feed: string, postIds: readonly number[]) => Promise<void>;
+}
+
+type Executor = Pick<Database, "insert">;
+
+async function insertPosts(db: Executor, feed: string, postIds: readonly number[]): Promise<void> {
+  if (postIds.length === 0) {
+    return;
+  }
+  await db
+    .insert(bluePosts)
+    .values(postIds.map((postId) => ({ feed, postId })))
+    .onConflictDoNothing();
+}
+
+export function createSeenPostStore(db: Database): SeenPostStore {
+  return {
+    history: async (feed) => {
+      const [row] = await db
+        .select({ baseline: bluePostFeeds.baselineCreatedAt })
+        .from(bluePostFeeds)
+        .where(eq(bluePostFeeds.feed, feed));
+      return row === undefined ? undefined : { baseline: row.baseline ?? undefined };
+    },
+    recordFirstCheck: async (feed, posts, baseline) => {
+      await db.transaction(async (tx) => {
+        await tx
+          .insert(bluePostFeeds)
+          .values({ feed, baselineCreatedAt: baseline ?? null })
+          .onConflictDoNothing();
+        await insertPosts(
+          tx,
+          feed,
+          posts.map((post) => post.id),
+        );
+      });
+    },
+    seenIds: async (feed, postIds) => {
+      if (postIds.length === 0) {
+        return new Set();
+      }
+      const seen = await db
+        .select({ postId: bluePosts.postId })
+        .from(bluePosts)
+        .where(and(eq(bluePosts.feed, feed), inArray(bluePosts.postId, [...postIds])));
+      return new Set(seen.map((row) => row.postId));
+    },
+    markSeen: async (feed, postIds) => {
+      await insertPosts(db, feed, postIds);
+    },
+  };
+}
