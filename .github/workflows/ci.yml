@@ -70,6 +70,7 @@ jobs:
             -e DISCORD_GUILD_ID=200000000000000002
             -e YOUTUBE_ALERT_CHANNEL_ID=300000000000000003
             -e ANTHROPIC_API_KEY=made-up-key
+            -e OPENAI_API_KEY=made-up-key
             -e DIGEST_CHANNEL_IDS=300000000000000004,300000000000000005
             -e DIGEST_POST_CHANNEL_ID=300000000000000006
             -e DATABASE_URL=postgres://postgres@localhost:5433/postgres"
