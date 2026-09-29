@@ -1,5 +1,5 @@
-import { type Database, dungeonBosses, dungeonLoot, dungeons, escapeLike } from "@nozdormu/db";
-import { asc, eq, ilike, sql } from "drizzle-orm";
+import { type Database, dungeonBosses, dungeonLoot, dungeons } from "@nozdormu/db";
+import { asc, eq } from "drizzle-orm";
 import type { Dungeon } from "./spyglass.ts";
 
 export interface StoredDungeon extends Dungeon {
@@ -13,8 +13,8 @@ export interface DungeonStore {
   // Replaces every stored dungeon with these, in one transaction.
   readonly replaceAll: (build: string, dungeons: readonly Dungeon[]) => Promise<void>;
   readonly get: (name: string) => Promise<StoredDungeon | undefined>;
-  // Dungeons whose name contains the text: names starting with it first, then alphabetically.
-  readonly search: (text: string, limit: number) => Promise<DungeonSummary[]>;
+  // Every dungeon, lowest levels first.
+  readonly list: () => Promise<DungeonSummary[]>;
   // The build of the stored dungeons, or undefined before the first sync.
   readonly loadedBuild: () => Promise<string | undefined>;
 }
@@ -93,21 +93,14 @@ export function createDungeonStore(db: Database): DungeonStore {
         build: found.sourceBuild,
       };
     },
-    search: (text, limit) => {
-      const escaped = escapeLike(text);
-      return db
+    list: () =>
+      db
         .select({ name: dungeons.name, minLevel: dungeons.minLevel, maxLevel: dungeons.maxLevel })
         .from(dungeons)
-        .where(ilike(dungeons.name, `%${escaped}%`))
-        .orderBy(
-          sql`case when ${dungeons.name} ilike ${`${escaped}%`} then 0 else 1 end`,
-          asc(dungeons.name),
-        )
-        .limit(limit);
-    },
+        .orderBy(asc(dungeons.minLevel), asc(dungeons.name)),
     loadedBuild: async () => {
-      const [any] = await db.select({ build: dungeons.sourceBuild }).from(dungeons).limit(1);
-      return any?.build;
+      const [first] = await db.select({ build: dungeons.sourceBuild }).from(dungeons).limit(1);
+      return first?.build;
     },
   };
 }

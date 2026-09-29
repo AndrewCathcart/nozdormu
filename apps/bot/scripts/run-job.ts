@@ -60,12 +60,7 @@ function readOnlyDungeons(store: DungeonStore): DungeonStore {
     ...store,
     replaceAll: (build, dungeons) => {
       logger.info(
-        {
-          event: "dry_run.dungeons",
-          build,
-          dungeons: dungeons.length,
-          bosses: dungeons.reduce((total, dungeon) => total + dungeon.bosses.length, 0),
-        },
+        { event: "dry_run.dungeons", build, dungeons: dungeons.length },
         "Would replace the stored dungeons",
       );
       return Promise.resolve();

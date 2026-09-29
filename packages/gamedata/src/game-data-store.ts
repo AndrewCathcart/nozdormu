@@ -1,7 +1,6 @@
 import {
   classSpells,
   type Database,
-  escapeLike,
   gameBuilds,
   items,
   recipeReagents,
@@ -70,6 +69,11 @@ async function insertInBatches<Row>(
 // "High Test" is a real fishing line, the only real item among the 19,224 in 1.60.1.70009 with
 // "test" in its name.
 const unusedName = String.raw`deprecated|(?<!high )\mtest\M|\[ph\]|placeholder|\munused\M|\(old\)`;
+
+// So "%" and "_" in what someone types match themselves, not any characters.
+function escapeLike(text: string): string {
+  return text.replaceAll(/[\\%_]/g, (character) => `\\${character}`);
+}
 
 // The recipes table keeps the item and its count null for an enchant.
 function resultOf(itemId: number | null, count: number | null): RecipeResult {

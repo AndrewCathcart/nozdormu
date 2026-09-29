@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createSpyglassReader } from "./spyglass.ts";
 
 const listing =
-  "https://api.github.com/repos/Karl-HeinzSchneider/WoW-Spyglass/contents/.contribute/data/dungeons";
+  "https://data.jsdelivr.com/v1/packages/gh/Karl-HeinzSchneider/WoW-Spyglass@main?structure=flat";
 const data =
   "https://raw.githubusercontent.com/Karl-HeinzSchneider/WoW-Spyglass/main/.contribute/data";
 
@@ -51,7 +51,8 @@ function urlOf(input: string | URL | Request): string {
   return input instanceof Request ? input.url : input instanceof URL ? input.href : input;
 }
 
-// Answers Spyglass's config, its dungeon listing and each dungeon file.
+// Answers Spyglass's config, the listing of its repository's files (the dungeon files, and others
+// that aren't dungeons) and each dungeon file.
 function createFakeFetch(files: Readonly<Record<string, unknown>>) {
   return vi.fn<typeof fetch>((input) => {
     const url = urlOf(input);
@@ -60,13 +61,13 @@ function createFakeFetch(files: Readonly<Record<string, unknown>>) {
     }
     if (url === listing) {
       return Promise.resolve(
-        json(
-          Object.keys(files).map((name) => ({
-            name,
-            type: "file",
-            download_url: `${data}/dungeons/${name}`,
-          })),
-        ),
+        json({
+          files: [
+            { name: "/README.md" },
+            { name: "/.contribute/data/items/items_0.json" },
+            ...Object.keys(files).map((name) => ({ name: `/.contribute/data/dungeons/${name}` })),
+          ],
+        }),
       );
     }
     const name = url.startsWith(`${data}/dungeons/`) ? url.slice(`${data}/dungeons/`.length) : "";
@@ -131,16 +132,20 @@ describe("createSpyglassReader", () => {
 
     await createSpyglassReader({ fetch })();
 
-    expect(fetch).not.toHaveBeenCalledWith(`${data}/dungeons/.gitkeep`, expect.anything());
+    expect(fetch.mock.calls.map(([input]) => urlOf(input))).toEqual([
+      `${data}/config.json`,
+      listing,
+      `${data}/dungeons/the_made_up_hollow.json`,
+    ]);
   });
 
-  it("fails, naming the page, when GitHub doesn't answer", async () => {
+  it("fails, naming the page, when a server doesn't answer", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>(() =>
       Promise.resolve(new Response("Service Unavailable", { status: 503 })),
     );
 
     await expect(createSpyglassReader({ fetch })()).rejects.toThrow(
-      new Error(`GitHub answered HTTP 503 for ${data}/config.json.`),
+      new Error(`The server answered HTTP 503 for ${data}/config.json.`),
     );
   });
 });

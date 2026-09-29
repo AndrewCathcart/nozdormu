@@ -54,36 +54,34 @@ describe("dungeon store", () => {
     expect(await store.get("The Made-up Hollow")).toBeUndefined();
   });
 
-  it("finds dungeons whose name contains the text, names starting with it first", async () => {
+  it("lists every dungeon, lowest levels first", async () => {
     const store = createDungeonStore(database.db);
     await store.replaceAll("1.60.1.69913", [
       dungeon("The Made-up Hollow", 13),
       dungeon("Made-up Keep", 22),
       dungeon("Made-up Caverns", 17),
-      dungeon("Other Crypts", 40),
     ]);
 
-    expect(await store.search("made-up", 25)).toEqual([
+    expect(await store.list()).toEqual([
+      { name: "The Made-up Hollow", minLevel: 13, maxLevel: 18 },
       { name: "Made-up Caverns", minLevel: 17, maxLevel: 22 },
       { name: "Made-up Keep", minLevel: 22, maxLevel: 27 },
-      { name: "The Made-up Hollow", minLevel: 13, maxLevel: 18 },
     ]);
   });
 
-  it("returns at most the number of dungeons asked for", async () => {
+  it("gives the build the stored dungeons were scanned in", async () => {
     const store = createDungeonStore(database.db);
-    await store.replaceAll("1.60.1.69913", [dungeon("Made-up Keep"), dungeon("Made-up Caverns")]);
-
-    expect(await store.search("made-up", 1)).toHaveLength(1);
-  });
-
-  it("gives the build of the stored dungeons, or none before the first sync", async () => {
-    const store = createDungeonStore(database.db);
-    await store.replaceAll("1.60.1.69913", []);
-    const before = await store.loadedBuild();
 
     await store.replaceAll("1.60.1.69913", [dungeon("Made-up Keep")]);
 
-    expect([before, await store.loadedBuild()]).toEqual([undefined, "1.60.1.69913"]);
+    expect(await store.loadedBuild()).toBe("1.60.1.69913");
+  });
+
+  it("gives no build when no dungeons are stored", async () => {
+    const store = createDungeonStore(database.db);
+
+    await store.replaceAll("1.60.1.69913", []);
+
+    expect(await store.loadedBuild()).toBeUndefined();
   });
 });

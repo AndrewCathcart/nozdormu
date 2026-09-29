@@ -23,7 +23,7 @@ function createDeps(found: readonly Dungeon[]) {
     store: {
       replaceAll: vi.fn<DungeonStore["replaceAll"]>().mockResolvedValue(undefined),
       get: vi.fn<DungeonStore["get"]>().mockResolvedValue(undefined),
-      search: vi.fn<DungeonStore["search"]>().mockResolvedValue([]),
+      list: vi.fn<DungeonStore["list"]>().mockResolvedValue([]),
       loadedBuild: vi.fn<DungeonStore["loadedBuild"]>().mockResolvedValue(undefined),
     } satisfies DungeonStore,
     logger: { info: vi.fn<Logger["info"]>() } satisfies Pick<Logger, "info">,
