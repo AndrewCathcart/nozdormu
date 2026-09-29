@@ -14,6 +14,9 @@ import type { FeedHistory, SeenPostStore } from "./seen-posts.ts";
 const newsChannelId = "300000000000000007";
 const forum = "https://eu.forums.example/en/wow";
 const feed = "made-up-forum";
+// Staff groups on the forum, each with its own page of posts.
+const staff = "made-up-staff";
+const developers = "made-up-developers";
 
 function post(id: number, fields: Partial<StaffPost> = {}): StaffPost {
   return {
@@ -84,6 +87,7 @@ function createDeps(posts: StaffPost[], state: FeedState | "never checked" = che
   return {
     newsChannelId,
     feed,
+    groups: [staff],
     readPosts: vi.fn<ForumReader>().mockResolvedValue(posts),
     seenPosts: createFakeStore(state),
     publish: vi.fn<ChannelPublisher>().mockResolvedValue(undefined),
@@ -166,6 +170,19 @@ describe("createBluePostsFeature", () => {
     expect(postedUrls(deps)).toEqual([post(2).url]);
   });
 
+  it("leaves out a topic whose title only uses forever as a plain word", async () => {
+    const deps = createDeps([
+      post(2, {
+        forum: { name: "General Discussion", parent: undefined },
+        topicTitle: "Queue taking forever since the patch",
+      }),
+    ]);
+
+    await pollJob(deps).run();
+
+    expect(deps.publish).not.toHaveBeenCalled();
+  });
+
   it("posts news from another forum when its title mentions Forever", async () => {
     const deps = createDeps([
       post(2, {
@@ -190,14 +207,43 @@ describe("createBluePostsFeature", () => {
     expect(deps.seenPosts.ids).toEqual(new Set([0, 1, 2]));
   });
 
-  it("warns that posts may have been missed when it has seen none of the tracker's posts", async () => {
-    const deps = createDeps([post(3), post(2)]);
+  it("logs the older Forever posts it skips", async () => {
+    const hotfixes = post(3, {
+      forum: { name: "General Discussion", parent: undefined },
+      topicTitle: "Hotfixes",
+    });
+    const deps = createDeps([hotfixes, post(2), post(0)]);
+
+    await pollJob(deps).run();
+
+    expect(deps.logger.info).toHaveBeenCalledWith(
+      { event: "blueposts.skipped_older", feed, postIds: [0] },
+      "Skipped older staff posts that reappeared on the tracker",
+    );
+  });
+
+  it("reads each staff group's posts, posting a post both groups list once", async () => {
+    const deps = { ...createDeps([]), groups: [staff, developers] };
+    deps.readPosts.mockImplementation((group) =>
+      Promise.resolve(group === developers ? [post(3), post(2)] : [post(2)]),
+    );
+
+    await pollJob(deps).run();
+
+    expect(postedUrls(deps)).toEqual([post(2).url, post(3).url]);
+  });
+
+  it("warns that posts may have been missed when it has seen none of a group's posts", async () => {
+    const deps = { ...createDeps([]), groups: [staff, developers] };
+    deps.readPosts.mockImplementation((group) =>
+      Promise.resolve(group === staff ? [post(3), post(2)] : [post(1)]),
+    );
 
     await pollJob(deps).run();
 
     expect(deps.logger.warn).toHaveBeenCalledExactlyOnceWith(
-      { event: "blueposts.gap", feed, posts: 2 },
-      "Saw none of the tracker's posts before, so some may have been missed",
+      { event: "blueposts.gap", feed, group: staff, posts: 2 },
+      "Saw none of the group's posts before, so some may have been missed",
     );
     expect(postedUrls(deps)).toEqual([post(2).url, post(3).url]);
   });

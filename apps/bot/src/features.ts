@@ -34,9 +34,14 @@ import {
 import type { REST } from "discord.js";
 import type { Config } from "./config.ts";
 
-// The forum whose staff posts go in the Forever news channel, and the feed name its seen posts
-// are stored under.
-const euForums = { address: "https://eu.forums.blizzard.com/en/wow", feed: "eu-forums" };
+// The forum whose staff posts go in the Forever news channel, the feed name its seen posts are
+// stored under, and the staff groups whose posts are read: its Blizzard tracker, and its developers,
+// most of whom the tracker leaves out.
+const euForums = {
+  address: "https://eu.forums.blizzard.com/en/wow",
+  feed: "eu-forums",
+  groups: ["blizzard-tracker", "wow-developer"],
+};
 
 // What the features need from the outside world. The bot passes the real ones; `pnpm job
 // --dry-run` swaps in versions that print instead of posting or writing.
@@ -93,6 +98,7 @@ export function createFeatures(deps: FeatureDeps): Feature[] {
     createBluePostsFeature({
       newsChannelId: deps.config.foreverNews.channelId,
       feed: euForums.feed,
+      groups: euForums.groups,
       readPosts: deps.readStaffPosts,
       seenPosts: deps.seenStaffPosts,
       publish: deps.publish,

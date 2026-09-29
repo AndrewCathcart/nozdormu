@@ -8,6 +8,9 @@ export interface BluePostsFeatureDeps {
   readonly newsChannelId: string;
   // Names the forum the posts are read from, so each forum's seen posts are kept apart.
   readonly feed: string;
+  // The forum's staff groups whose posts are read. Its Blizzard tracker leaves out many developers,
+  // who have a group of their own.
+  readonly groups: readonly string[];
   readonly readPosts: ForumReader;
   readonly seenPosts: SeenPostStore;
   readonly publish: ChannelPublisher;
@@ -15,7 +18,8 @@ export interface BluePostsFeatureDeps {
   readonly logger: Pick<Logger, "info" | "warn">;
 }
 
-const forever = /forever/i;
+// The game's name, capitalised as Blizzard writes it, so "queue taking forever" doesn't count.
+const forever = /\bForever\b/;
 
 // In one of the forums' Forever categories (or one under them), or a topic about Forever elsewhere,
 // like Blizzard's news announcements in General Discussion.
@@ -37,7 +41,14 @@ export function createBluePostsFeature(deps: BluePostsFeatureDeps): Feature {
   const { feed } = deps;
 
   const poll = async (): Promise<void> => {
-    const posts = await deps.readPosts();
+    const pages: { readonly group: string; readonly posts: StaffPost[] }[] = [];
+    for (const group of deps.groups) {
+      pages.push({ group, posts: await deps.readPosts(group) });
+    }
+    // A post can be on more than one group's page.
+    const posts = [
+      ...new Map(pages.flatMap((page) => page.posts).map((post) => [post.id, post])).values(),
+    ];
     const history = await deps.seenPosts.history(feed);
     if (history === undefined) {
       await deps.seenPosts.recordFirstCheck(feed, posts);
@@ -51,13 +62,15 @@ export function createBluePostsFeature(deps: BluePostsFeatureDeps): Feature {
       feed,
       posts.map((post) => post.id),
     );
-    // The tracker shows only the latest posts. If none of them was seen before, more arrived since
-    // the last check than it shows, perhaps while the bot was down.
-    if (posts.length > 0 && seen.size === 0) {
-      deps.logger.warn(
-        { event: "blueposts.gap", feed, posts: posts.length },
-        "Saw none of the tracker's posts before, so some may have been missed",
-      );
+    // Each group's page shows only its latest posts. If none of them was seen before, more arrived
+    // since the last check than it shows, perhaps while the bot was down.
+    for (const page of pages) {
+      if (page.posts.length > 0 && page.posts.every((post) => !seen.has(post.id))) {
+        deps.logger.warn(
+          { event: "blueposts.gap", feed, group: page.group, posts: page.posts.length },
+          "Saw none of the group's posts before, so some may have been missed",
+        );
+      }
     }
     const unseen = posts.filter((post) => !seen.has(post.id));
     // A post no newer than the first check's newest was already there, and has resurfaced (say,

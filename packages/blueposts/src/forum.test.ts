@@ -3,6 +3,8 @@ import { ZodError } from "zod";
 import { createForumReader } from "./forum.ts";
 
 const forum = "https://eu.forums.example/en/wow";
+// The staff group whose posts are read.
+const group = "made-up-staff";
 
 // The fields the reader uses from a post in the forum's staff-post tracker.
 interface TrackerPost {
@@ -16,21 +18,23 @@ interface TrackerPost {
   readonly username: string;
   readonly name: string | null;
   readonly user_title: string | null;
-  readonly avatar_template: string;
+  readonly avatar_template: string | null;
   readonly excerpt: string;
 }
 
 interface SiteCategory {
   readonly id: number;
   readonly name: string;
-  readonly parent_category_id?: number;
+  readonly parent_category_id?: number | null;
 }
 
-// A made-up forum: Forever (40) with General Discussion (41) under it, and News (7).
+// A made-up forum: Forever (40) with General Discussion (41) under it, News (7), and Realms (8),
+// whose missing parent is given as null.
 const categories: SiteCategory[] = [
   { id: 40, name: "WoW: Forever" },
   { id: 41, name: "WoW: Forever General Discussion", parent_category_id: 40 },
   { id: 7, name: "News" },
+  { id: 8, name: "Realms", parent_category_id: null },
 ];
 
 function trackerPost(fields: Partial<TrackerPost> = {}): TrackerPost {
@@ -63,7 +67,7 @@ function json(body: object): Response {
   });
 }
 
-// Answers the tracker and the site's categories. Later calls can give different tracker pages.
+// Answers the group's posts page and the site's categories. Later calls can give different pages.
 function createFakeFetch(...trackerPages: TrackerPost[][]) {
   let page = 0;
   return vi.fn<typeof fetch>((input) => {
@@ -71,7 +75,7 @@ function createFakeFetch(...trackerPages: TrackerPost[][]) {
     if (url === `${forum}/site.json`) {
       return Promise.resolve(json({ categories }));
     }
-    if (url === `${forum}/groups/blizzard-tracker/posts.json`) {
+    if (url === `${forum}/groups/${group}/posts.json`) {
       const posts = trackerPages[Math.min(page, trackerPages.length - 1)] ?? [];
       page += 1;
       return Promise.resolve(json({ posts }));
@@ -95,7 +99,7 @@ describe("createForumReader", () => {
       }),
     ]);
 
-    const posts = await createForumReader({ fetch, forum })();
+    const posts = await createForumReader({ fetch, forum })(group);
 
     expect(posts).toEqual([
       {
@@ -132,7 +136,7 @@ describe("createForumReader", () => {
   it("names an author without a display name by their username", async () => {
     const fetch = createFakeFetch([trackerPost({ name: null })]);
 
-    const [post] = await createForumReader({ fetch, forum })();
+    const [post] = await createForumReader({ fetch, forum })(group);
 
     expect(post?.author).toBe("MadeUpCM-1234");
   });
@@ -140,7 +144,7 @@ describe("createForumReader", () => {
   it("gives no title for a poster without one", async () => {
     const fetch = createFakeFetch([trackerPost({ user_title: null })]);
 
-    const [post] = await createForumReader({ fetch, forum })();
+    const [post] = await createForumReader({ fetch, forum })(group);
 
     expect(post?.authorTitle).toBeUndefined();
   });
@@ -154,7 +158,7 @@ describe("createForumReader", () => {
     ].join("\n");
     const fetch = createFakeFetch([trackerPost({ excerpt })]);
 
-    const [post] = await createForumReader({ fetch, forum })();
+    const [post] = await createForumReader({ fetch, forum })(group);
 
     expect(post?.excerpt).toBe(
       ["Change Log", "", "Fixed casters’ animations & sounds… mostly.", "Read more about…"].join(
@@ -171,9 +175,9 @@ describe("createForumReader", () => {
     );
     const readPosts = createForumReader({ fetch, forum });
 
-    await readPosts();
-    await readPosts();
-    await readPosts();
+    await readPosts(group);
+    await readPosts(group);
+    await readPosts(group);
 
     const siteLookups = fetch.mock.calls.filter(([input]) => urlOf(input).endsWith("/site.json"));
     expect(siteLookups).toHaveLength(2);
@@ -184,14 +188,38 @@ describe("createForumReader", () => {
       Promise.resolve(new Response("Service Unavailable", { status: 503 })),
     );
 
-    await expect(createForumReader({ fetch, forum })()).rejects.toThrow(
-      new Error("The forum answered HTTP 503 for /groups/blizzard-tracker/posts.json."),
+    await expect(createForumReader({ fetch, forum })(group)).rejects.toThrow(
+      new Error("The forum answered HTTP 503 for /groups/made-up-staff/posts.json."),
+    );
+  });
+
+  it("reads a post by a poster without an avatar", async () => {
+    const fetch = createFakeFetch([trackerPost({ avatar_template: null })]);
+
+    const [post] = await createForumReader({ fetch, forum })(group);
+
+    expect(post?.avatarUrl).toBeUndefined();
+  });
+
+  it("reads a post in a forum whose parent is given as null", async () => {
+    const fetch = createFakeFetch([trackerPost({ category_id: 8 })]);
+
+    const [post] = await createForumReader({ fetch, forum })(group);
+
+    expect(post?.forum).toEqual({ name: "Realms", parent: undefined });
+  });
+
+  it("fails when the group's page lists no posts, which it never really does", async () => {
+    const fetch = createFakeFetch([]);
+
+    await expect(createForumReader({ fetch, forum })(group)).rejects.toThrow(
+      new Error("The forum listed no posts for made-up-staff."),
     );
   });
 
   it("refuses a post whose time isn't one", async () => {
     const fetch = createFakeFetch([trackerPost({ created_at: "yesterday" })]);
 
-    await expect(createForumReader({ fetch, forum })()).rejects.toThrow(ZodError);
+    await expect(createForumReader({ fetch, forum })(group)).rejects.toThrow(ZodError);
   });
 });
