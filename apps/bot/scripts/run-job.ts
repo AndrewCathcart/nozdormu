@@ -4,6 +4,7 @@
 // A dry run prints the posts it would make to the terminal, never into the logs.
 import type { SeenPostStore } from "@nozdormu/blueposts";
 import { type ChannelMessage, createLogger } from "@nozdormu/core";
+import type { DungeonStore } from "@nozdormu/dungeons";
 import type { GameDataStore } from "@nozdormu/gamedata";
 import type { SeenVideoStore } from "@nozdormu/youtube";
 import { REST } from "discord.js";
@@ -83,12 +84,26 @@ function asText(message: ChannelMessage): string {
   return [message.content ?? "", ...cards].filter((part) => part !== "").join("\n\n");
 }
 
+function readOnlyDungeons(store: DungeonStore): DungeonStore {
+  return {
+    ...store,
+    replaceAll: (build, dungeons) => {
+      logger.info(
+        { event: "dry_run.dungeons", build, dungeons: dungeons.length },
+        "Would replace the stored dungeons",
+      );
+      return Promise.resolve();
+    },
+  };
+}
+
 function dryRun(deps: FeatureDeps): FeatureDeps {
   return {
     ...deps,
     seenVideos: readOnlySeenVideos(deps.seenVideos),
     gameDataStore: readOnlyGameData(deps.gameDataStore),
     seenStaffPosts: readOnlySeenStaffPosts(deps.seenStaffPosts),
+    dungeonStore: readOnlyDungeons(deps.dungeonStore),
     publish: (channelId, message) => {
       console.log(`\nDRY RUN: would post in channel ${channelId}:\n${asText(message)}\n`);
       return Promise.resolve();

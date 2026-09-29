@@ -1,9 +1,81 @@
 {
-  "id": "d9761b24-e202-4c64-9b4f-f74a15c039ec",
-  "prevId": "b02c597c-c6be-46e7-bb7e-66e43da105bf",
+  "id": "8de3343f-70b3-4b09-bcc1-f09d4cb9b047",
+  "prevId": "d9761b24-e202-4c64-9b4f-f74a15c039ec",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
+    "public.blue_post_feeds": {
+      "name": "blue_post_feeds",
+      "schema": "",
+      "columns": {
+        "feed": {
+          "name": "feed",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "first_checked_at": {
+          "name": "first_checked_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "baseline_created_at": {
+          "name": "baseline_created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.blue_posts": {
+      "name": "blue_posts",
+      "schema": "",
+      "columns": {
+        "feed": {
+          "name": "feed",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "post_id": {
+          "name": "post_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "seen_at": {
+          "name": "seen_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "blue_posts_feed_post_id_pk": {
+          "name": "blue_posts_feed_post_id_pk",
+          "columns": [
+            "feed",
+            "post_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.class_spells": {
       "name": "class_spells",
       "schema": "",

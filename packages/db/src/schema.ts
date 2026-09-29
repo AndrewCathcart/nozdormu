@@ -1,5 +1,14 @@
 import { sql } from "drizzle-orm";
-import { check, index, integer, pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core";
+import {
+  check,
+  foreignKey,
+  index,
+  integer,
+  pgTable,
+  primaryKey,
+  text,
+  timestamp,
+} from "drizzle-orm/pg-core";
 
 // The hash of the command definitions last registered for each application in each server, so
 // startup only re-registers commands when they've changed.
@@ -139,4 +148,46 @@ export const bluePosts = pgTable(
     seenAt: timestamp("seen_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [primaryKey({ columns: [table.feed, table.postId] })],
+);
+
+// Forever's dungeons, from Spyglass, replaced wholesale by each sync. The build is the one Spyglass
+// scanned them in, and the required level is null where it isn't known.
+export const dungeons = pgTable("dungeons", {
+  name: text("name").primaryKey(),
+  minLevel: integer("min_level").notNull(),
+  maxLevel: integer("max_level").notNull(),
+  requiredLevel: integer("required_level"),
+  sourceBuild: text("source_build").notNull(),
+});
+
+// Each dungeon's bosses, in the order they're usually fought.
+export const dungeonBosses = pgTable(
+  "dungeon_bosses",
+  {
+    dungeon: text("dungeon")
+      .notNull()
+      .references(() => dungeons.name, { onDelete: "cascade" }),
+    position: integer("position").notNull(),
+    name: text("name").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.dungeon, table.position] })],
+);
+
+// The loot seen from each boss so far, in Spyglass's order.
+export const dungeonLoot = pgTable(
+  "dungeon_loot",
+  {
+    dungeon: text("dungeon").notNull(),
+    bossPosition: integer("boss_position").notNull(),
+    position: integer("position").notNull(),
+    itemId: integer("item_id").notNull(),
+    itemName: text("item_name").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.dungeon, table.bossPosition, table.position] }),
+    foreignKey({
+      columns: [table.dungeon, table.bossPosition],
+      foreignColumns: [dungeonBosses.dungeon, dungeonBosses.position],
+    }).onDelete("cascade"),
+  ],
 );

@@ -14,6 +14,7 @@
     "@nozdormu/blueposts": "workspace:*",
     "@nozdormu/core": "workspace:*",
     "@nozdormu/db": "workspace:*",
+    "@nozdormu/dungeons": "workspace:*",
     "@nozdormu/gamedata": "workspace:*",
     "@nozdormu/ping": "workspace:*",
     "@nozdormu/youtube": "workspace:*",

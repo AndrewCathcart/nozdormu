@@ -16,6 +16,13 @@ import {
 } from "@nozdormu/core";
 import type { Database } from "@nozdormu/db";
 import {
+  createDungeonFeature,
+  createDungeonStore,
+  createSpyglassReader,
+  type DungeonStore,
+  type SpyglassReader,
+} from "@nozdormu/dungeons";
+import {
   createGameDataFeature,
   createGameDataStore,
   createWagoSource,
@@ -56,6 +63,8 @@ export interface FeatureDeps {
   readonly readStaffPosts: ForumReader;
   readonly seenStaffPosts: SeenPostStore;
   readonly logger: Pick<Logger, "info" | "warn">;
+  readonly readSpyglass: SpyglassReader;
+  readonly dungeonStore: DungeonStore;
 }
 
 export function createFeatureDeps(
@@ -75,6 +84,8 @@ export function createFeatureDeps(
     gameDataSource: createWagoSource({ fetch, product: foreverProduct }),
     readStaffPosts: createForumReader({ fetch, forum: euForums.address }),
     seenStaffPosts: createSeenPostStore(db),
+    readSpyglass: createSpyglassReader({ fetch }),
+    dungeonStore: createDungeonStore(db),
   };
 }
 
@@ -103,6 +114,11 @@ export function createFeatures(deps: FeatureDeps): Feature[] {
       seenPosts: deps.seenStaffPosts,
       publish: deps.publish,
       recentPosts: deps.recentPosts,
+      logger: deps.logger,
+    }),
+    createDungeonFeature({
+      readSpyglass: deps.readSpyglass,
+      store: deps.dungeonStore,
       logger: deps.logger,
     }),
   ];
