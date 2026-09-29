@@ -9,6 +9,12 @@
       "matchUpdateTypes": ["minor", "patch", "digest", "pin"],
       "groupName": "non-major dependencies",
       "schedule": ["before 6am on monday"]
+    },
+    {
+      "description": "Production runs Postgres 17 on Supabase, so CI tests against 17. Move to a new major only when Supabase does.",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["postgres"],
+      "allowedVersions": "<18"
     }
   ]
 }
