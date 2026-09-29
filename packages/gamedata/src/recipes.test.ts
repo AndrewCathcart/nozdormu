@@ -87,6 +87,23 @@ describe("parseRecipes", () => {
     ]);
   });
 
+  // Enchanting's enchants (effect 53, "enchant item") make nothing; they enchant what you're wearing.
+  it("reads an enchant as a recipe that makes no item", () => {
+    const recipes = parseRecipes(
+      tables({
+        SpellName: csv([
+          ["ID", "Name_lang"],
+          [900_001, "Enchant Made-up Bracer - Testing"],
+        ]),
+        SpellEffect: csv([spellEffectHeader, [1, 900_001, 53, 0, 0]]),
+      }),
+    );
+
+    expect(recipes.map((recipe) => [recipe.name, recipe.result])).toEqual([
+      ["Enchant Made-up Bracer - Testing", { kind: "enchant" }],
+    ]);
+  });
+
   // Mages' Conjure spells make items too, from a class skill line (category 7).
   it("leaves out spells that aren't a profession's", () => {
     const recipes = parseRecipes(

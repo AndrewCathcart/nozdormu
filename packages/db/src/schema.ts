@@ -66,13 +66,14 @@ export const items = pgTable(
 );
 
 // Profession recipes, replaced wholesale with the items by each import. Keyed by the recipe's
-// spell. The skill levels are both null where the game data has none.
+// spell. The item and its count are both null for an enchant, and the skill levels are both null
+// where the game data has none.
 export const recipes = pgTable("recipes", {
   spellId: integer("spell_id").primaryKey(),
   name: text("name").notNull(),
   professions: text("professions").array().notNull(),
-  itemId: integer("item_id").notNull(),
-  itemCount: integer("item_count").notNull(),
+  itemId: integer("item_id"),
+  itemCount: integer("item_count"),
   yellowAt: integer("yellow_at"),
   greyAt: integer("grey_at"),
   // The recipe items that teach it.

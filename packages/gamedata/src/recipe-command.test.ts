@@ -74,6 +74,29 @@ describe("/recipe", () => {
     });
   });
 
+  it("replies to an enchant without an item, linking the enchant itself", async () => {
+    const enchant: RecipeRecord = {
+      ...transmute,
+      name: "Enchant Made-up Bracer - Testing",
+      professions: ["Enchanting"],
+      result: { kind: "enchant" },
+    };
+    const command = createRecipeCommand(createFakeStore([enchant]));
+
+    const reply = await command.handle(invoke("900001"));
+
+    expect(reply.content).toBe(
+      [
+        "**Enchant Made-up Bracer - Testing** · Enchanting",
+        "Reagents: 1 × Made-up Ore, 2 × Made-up Crystal",
+        "Turns yellow at 275 and grey at 290",
+        "Taught by Recipe: Transmute Made-up Metal",
+        "https://www.wowhead.com/forever/spell=900001",
+        "-# Recipe data from wago.tools",
+      ].join("\n"),
+    );
+  });
+
   it("leaves out reagents, skill levels and teachers the game data doesn't have", async () => {
     const bare = { ...transmute, reagents: [], skillLevels: undefined, taughtBy: [] };
     const command = createRecipeCommand(createFakeStore([bare]));

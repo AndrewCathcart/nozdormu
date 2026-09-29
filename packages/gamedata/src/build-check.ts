@@ -22,7 +22,8 @@ export interface BuildCheckDeps {
 
 // Which version of the import this code does. Bump it when an import starts storing something new,
 // and the next check imports the current build again, even if it was imported before.
-export const importFormat = 2;
+// 2 added recipes, and 3 enchants.
+export const importFormat = 3;
 
 // A build with fewer items or recipes than this is treated as a failed download. Forever has about
 // 19,000 items and 2,300 recipes.
@@ -62,7 +63,7 @@ async function download(source: GameDataSource, version: string): Promise<GameBu
   // The client still lists recipes, mostly Season of Discovery's, whose items Forever's item table
   // doesn't have. They can't be made, so they're left out, as are recipe items Forever doesn't have.
   const recipes = allRecipes
-    .filter((recipe) => itemIds.has(recipe.result.itemId))
+    .filter((recipe) => recipe.result.kind === "enchant" || itemIds.has(recipe.result.itemId))
     .map((recipe) => ({ ...recipe, taughtBy: recipe.taughtBy.filter((id) => itemIds.has(id)) }));
   return { version, format: importFormat, items, recipes };
 }

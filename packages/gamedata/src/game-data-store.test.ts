@@ -50,6 +50,18 @@ describe("game data store", () => {
     expect(await store.getRecipe(900_002)).toEqual(recipe(900_002, "Made-up Other Sword"));
   });
 
+  it("keeps an enchant, which makes no item", async () => {
+    const store = createGameDataStore(database.db);
+    const enchant: RecipeRecord = {
+      ...recipe(900_001, "Enchant Made-up Bracer - Testing"),
+      result: { kind: "enchant" },
+    };
+
+    await importBuild(store, "1.60.1.1111", [], [enchant]);
+
+    expect(await store.getRecipe(900_001)).toEqual(enchant);
+  });
+
   it("keeps a recipe without skill levels", async () => {
     const store = createGameDataStore(database.db);
     const unlevelled = { ...recipe(900_001, "Made-up Stew"), skillLevels: undefined };
