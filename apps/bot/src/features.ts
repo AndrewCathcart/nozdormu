@@ -53,6 +53,7 @@ import {
   type FeedReader,
   readFeedOverHttp,
   type SeenVideoStore,
+  watchedChannels,
 } from "@nozdormu/youtube";
 import type { REST } from "discord.js";
 import type { Config } from "./config.ts";
@@ -123,6 +124,7 @@ export function createFeatures(deps: FeatureDeps): Feature[] {
   return [
     createPingFeature(),
     createYouTubeFeature({
+      channels: watchedChannels,
       alertChannelId: deps.config.youtube.alertChannelId,
       readFeed: deps.readFeed,
       seenVideos: deps.seenVideos,
