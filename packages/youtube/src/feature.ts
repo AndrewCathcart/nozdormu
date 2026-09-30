@@ -3,10 +3,14 @@ import type { Video } from "./feed.ts";
 import type { FeedReader } from "./feed-reader.ts";
 import type { SeenVideoStore } from "./seen-videos.ts";
 
-// The YouTube channel the alert watches.
-const scotteJaye = { name: "ScotteJaye", youtubeChannelId: "UCyMNUoiD0vlmFtiriDtVI5Q" };
+export interface YouTubeChannel {
+  readonly name: string;
+  readonly youtubeChannelId: string;
+}
 
 export interface YouTubeFeatureDeps {
+  // The YouTube channels whose new videos are posted.
+  readonly channels: readonly YouTubeChannel[];
   // The Discord channel new videos are posted in.
   readonly alertChannelId: string;
   readonly readFeed: FeedReader;
@@ -24,20 +28,19 @@ function byPublishTime(a: Video, b: Video): number {
   return a.publishedAt.getTime() - b.publishedAt.getTime();
 }
 
-// Checks ScotteJaye's feed and posts each new video once. A video is recorded only after its post
-// succeeds, so a failed post is retried at the next check. Before posting, the bot looks for the
+// Checks each watched channel's feed and posts each new video once. A video is recorded only after
+// its post succeeds, so a failed post is retried at the next check. Before posting, the bot looks for the
 // link among its own recent messages, so a post that succeeded before a crash isn't repeated, and
 // each post carries a nonce, so Discord drops a repeat of it sent within a few minutes.
 export function createYouTubeFeature(deps: YouTubeFeatureDeps): Feature {
-  const channelId = scotteJaye.youtubeChannelId;
-
-  const poll = async (): Promise<void> => {
-    const videos = await deps.readFeed(feedUrl(channelId));
-    const history = await deps.seenVideos.history(channelId);
+  const pollChannel = async (channel: YouTubeChannel): Promise<void> => {
+    const { youtubeChannelId } = channel;
+    const videos = await deps.readFeed(feedUrl(youtubeChannelId));
+    const history = await deps.seenVideos.history(youtubeChannelId);
     if (!history.firstCheckDone) {
-      await deps.seenVideos.recordFirstCheck(channelId, videos);
+      await deps.seenVideos.recordFirstCheck(youtubeChannelId, videos);
       deps.logger.info(
-        { event: "youtube.first_check", channel: scotteJaye.name, videos: videos.length },
+        { event: "youtube.first_check", channel: channel.name, videos: videos.length },
         "Recorded the channel's existing videos without posting them",
       );
       return;
@@ -49,11 +52,11 @@ export function createYouTubeFeature(deps: YouTubeFeatureDeps): Feature {
     const baseline = history.baselinePublishedAt;
     const older = unseen.filter((video) => baseline !== undefined && video.publishedAt <= baseline);
     if (older.length > 0) {
-      await deps.seenVideos.markSeen(channelId, older);
+      await deps.seenVideos.markSeen(youtubeChannelId, older);
       deps.logger.info(
         {
           event: "youtube.skipped_older",
-          channel: scotteJaye.name,
+          channel: channel.name,
           videoIds: older.map((v) => v.id),
         },
         "Skipped older videos that reappeared in the feed",
@@ -68,12 +71,12 @@ export function createYouTubeFeature(deps: YouTubeFeatureDeps): Feature {
     const failures: unknown[] = [];
     for (const video of fresh) {
       if (alreadyPosted.some((post) => post.content.includes(video.url))) {
-        await deps.seenVideos.markSeen(channelId, [video]);
+        await deps.seenVideos.markSeen(youtubeChannelId, [video]);
         continue;
       }
       try {
         await deps.publish(deps.alertChannelId, {
-          content: `🚨 NEW ${scotteJaye.name.toUpperCase()} VIDEO 🚨\n${video.url}`,
+          content: `🚨 NEW ${channel.name.toUpperCase()} VIDEO 🚨\n${video.url}`,
           allowed_mentions: { parse: [] },
           nonce: `yt-${video.id}`,
           enforce_nonce: true,
@@ -83,14 +86,14 @@ export function createYouTubeFeature(deps: YouTubeFeatureDeps): Feature {
         continue;
       }
       try {
-        await deps.seenVideos.markSeen(channelId, [video]);
+        await deps.seenVideos.markSeen(youtubeChannelId, [video]);
       } catch (error) {
         // Posted but not recorded: the next check should find the post among the bot's own.
         failures.push(error);
         continue;
       }
       deps.logger.info(
-        { event: "youtube.posted", channel: scotteJaye.name, videoId: video.id },
+        { event: "youtube.posted", channel: channel.name, videoId: video.id },
         "Posted a new YouTube video",
       );
     }
@@ -98,6 +101,27 @@ export function createYouTubeFeature(deps: YouTubeFeatureDeps): Feature {
       throw new AggregateError(
         failures,
         `Couldn't post or record ${String(failures.length)} new video(s).`,
+      );
+    }
+  };
+
+  // One channel failing doesn't stop the others being checked; the check then fails.
+  const poll = async (): Promise<void> => {
+    const failures: unknown[] = [];
+    const failedNames: string[] = [];
+    for (const channel of deps.channels) {
+      try {
+        await pollChannel(channel);
+      } catch (error) {
+        failures.push(error);
+        failedNames.push(channel.name);
+      }
+    }
+    // The message names the channels only: a cause's own message can hold data the logger scrubs.
+    if (failures.length > 0) {
+      throw new AggregateError(
+        failures,
+        `Couldn't check YouTube channel(s): ${failedNames.join(", ")}.`,
       );
     }
   };

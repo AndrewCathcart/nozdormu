@@ -10,7 +10,7 @@ export interface Config {
     readonly url: string;
   };
   readonly youtube: {
-    // The Discord channel new ScotteJaye videos are posted in.
+    // The Discord channel new YouTube videos are posted in.
     readonly alertChannelId: string;
   };
   readonly anthropic: {

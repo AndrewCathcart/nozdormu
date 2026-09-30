@@ -7,6 +7,10 @@ import type { ChannelHistory, SeenVideo, SeenVideoStore } from "./seen-videos.ts
 
 const alertChannelId = "300000000000000003";
 
+const scotteJaye = { name: "ScotteJaye", youtubeChannelId: "UCyMNUoiD0vlmFtiriDtVI5Q" };
+const channelOne = { name: "Made-up One", youtubeChannelId: "UC1111111111111111111111" };
+const channelTwo = { name: "Made-up Two", youtubeChannelId: "UC2222222222222222222222" };
+
 function video(id: string, published: string): Video {
   return { id, url: `https://www.youtube.com/watch?v=${id}`, publishedAt: new Date(published) };
 }
@@ -20,36 +24,65 @@ function newestOf(videos: readonly SeenVideo[]): Date | undefined {
   return times.length === 0 ? undefined : new Date(Math.max(...times));
 }
 
-// An in-memory store for ScotteJaye's channel. A given history is treated as the first check.
-function createFakeSeenVideos(history?: { readonly seen: readonly Video[] }) {
-  let firstCheckDone = history !== undefined;
-  let baselinePublishedAt = newestOf(history?.seen ?? []);
-  const seen = new Map<string, SeenVideo>((history?.seen ?? []).map((v) => [v.id, v]));
-  const record = (videos: readonly SeenVideo[]): void => {
+// An in-memory store that keeps each channel's history apart. A given history is treated as the
+// first check of every channel except those listed as never checked.
+interface FakeHistory {
+  readonly seen: readonly Video[];
+  readonly neverChecked?: readonly string[];
+}
+
+function createFakeSeenVideos(history?: FakeHistory) {
+  const channels = new Map<
+    string,
+    { firstCheckDone: boolean; baselinePublishedAt: Date | undefined; seen: Map<string, SeenVideo> }
+  >();
+  const stateOf = (channelId: string) => {
+    let state = channels.get(channelId);
+    if (state === undefined) {
+      const checked = history !== undefined && !(history.neverChecked ?? []).includes(channelId);
+      const seen = checked ? history.seen : [];
+      state = {
+        firstCheckDone: checked,
+        baselinePublishedAt: newestOf(seen),
+        seen: new Map(seen.map((v) => [v.id, v])),
+      };
+      channels.set(channelId, state);
+    }
+    return state;
+  };
+  const record = (channelId: string, videos: readonly SeenVideo[]): void => {
     for (const v of videos) {
-      seen.set(v.id, v);
+      stateOf(channelId).seen.set(v.id, v);
     }
   };
   return {
-    seen,
-    history: (): Promise<ChannelHistory> =>
-      Promise.resolve({ firstCheckDone, seenIds: new Set(seen.keys()), baselinePublishedAt }),
-    recordFirstCheck: (_channelId, videos) => {
-      firstCheckDone = true;
-      baselinePublishedAt = newestOf(videos);
-      record(videos);
+    seenIn: (channelId: string): string[] => [...stateOf(channelId).seen.keys()].toSorted(),
+    history: (channelId): Promise<ChannelHistory> => {
+      const state = stateOf(channelId);
+      return Promise.resolve({
+        firstCheckDone: state.firstCheckDone,
+        seenIds: new Set(state.seen.keys()),
+        baselinePublishedAt: state.baselinePublishedAt,
+      });
+    },
+    recordFirstCheck: (channelId, videos) => {
+      const state = stateOf(channelId);
+      state.firstCheckDone = true;
+      state.baselinePublishedAt = newestOf(videos);
+      record(channelId, videos);
       return Promise.resolve();
     },
-    markSeen: (_channelId, videos) => {
-      record(videos);
+    markSeen: (channelId, videos) => {
+      record(channelId, videos);
       return Promise.resolve();
     },
-  } satisfies SeenVideoStore & { readonly seen: Map<string, SeenVideo> };
+  } satisfies SeenVideoStore & { readonly seenIn: (channelId: string) => string[] };
 }
 
 // The feed lists videos newest first, like YouTube's.
-function createDeps(feed: readonly Video[], history?: { readonly seen: readonly Video[] }) {
+function createDeps(feed: readonly Video[], history?: FakeHistory) {
   return {
+    channels: [scotteJaye],
     alertChannelId,
     readFeed: vi.fn<FeedReader>().mockResolvedValue([...feed]),
     seenVideos: createFakeSeenVideos(history),
@@ -67,6 +100,21 @@ function pollJob(deps: ReturnType<typeof createDeps>) {
   return job;
 }
 
+// Runs a check that should fail, and returns its error's message and what caused it.
+async function checkFailure(deps: ReturnType<typeof createDeps>) {
+  const error: unknown = await pollJob(deps)
+    .run()
+    .then(
+      () => undefined,
+      (reason: unknown) => reason,
+    );
+  assert(error instanceof AggregateError, "The check should fail with an AggregateError.");
+  return {
+    message: error.message,
+    causes: error.errors.map((cause: unknown) => (cause instanceof Error ? cause.message : cause)),
+  };
+}
+
 describe("YouTube alert", () => {
   it("records the videos already on the channel at its first check, without posting any", async () => {
     const deps = createDeps([videoB, videoA]);
@@ -74,7 +122,10 @@ describe("YouTube alert", () => {
     await pollJob(deps).run();
 
     expect(deps.publish).not.toHaveBeenCalled();
-    expect([...deps.seenVideos.seen.keys()].toSorted()).toEqual(["aaaaaaaaaaa", "bbbbbbbbbbb"]);
+    expect(deps.seenVideos.seenIn(scotteJaye.youtubeChannelId)).toEqual([
+      "aaaaaaaaaaa",
+      "bbbbbbbbbbb",
+    ]);
   });
 
   it("counts a first check that found no videos, so the next upload is posted", async () => {
@@ -125,7 +176,10 @@ describe("YouTube alert", () => {
     await pollJob(deps).run();
 
     expect(deps.publish).not.toHaveBeenCalled();
-    expect(deps.seenVideos.seen.has("aaaaaaaaaaa")).toBe(true);
+    expect(deps.seenVideos.seenIn(scotteJaye.youtubeChannelId)).toEqual([
+      "aaaaaaaaaaa",
+      "bbbbbbbbbbb",
+    ]);
   });
 
   it("doesn't repost a video its recent messages already link to, and records it", async () => {
@@ -140,13 +194,19 @@ describe("YouTube alert", () => {
     await pollJob(deps).run();
 
     expect(deps.publish).not.toHaveBeenCalled();
-    expect(deps.seenVideos.seen.has("ccccccccccc")).toBe(true);
+    expect(deps.seenVideos.seenIn(scotteJaye.youtubeChannelId)).toEqual([
+      "bbbbbbbbbbb",
+      "ccccccccccc",
+    ]);
   });
 
   it("posts a video on a later check if posting it failed", async () => {
     const deps = createDeps([videoB, videoA], { seen: [videoA] });
     deps.publish.mockRejectedValueOnce(new Error("Discord is down"));
-    await expect(pollJob(deps).run()).rejects.toThrow("Couldn't post or record 1 new video(s).");
+    expect(await checkFailure(deps)).toEqual({
+      message: "Couldn't check YouTube channel(s): ScotteJaye.",
+      causes: ["Couldn't post or record 1 new video(s)."],
+    });
 
     await pollJob(deps).run();
 
@@ -160,29 +220,77 @@ describe("YouTube alert", () => {
     const deps = createDeps([videoC, videoB, videoA], { seen: [videoA] });
     deps.publish.mockRejectedValueOnce(new Error("AutoMod blocked it"));
 
-    await expect(pollJob(deps).run()).rejects.toThrow("Couldn't post or record 1 new video(s).");
+    expect(await checkFailure(deps)).toEqual({
+      message: "Couldn't check YouTube channel(s): ScotteJaye.",
+      causes: ["Couldn't post or record 1 new video(s)."],
+    });
 
-    expect([...deps.seenVideos.seen.keys()].toSorted()).toEqual(["aaaaaaaaaaa", "ccccccccccc"]);
+    expect(deps.seenVideos.seenIn(scotteJaye.youtubeChannelId)).toEqual([
+      "aaaaaaaaaaa",
+      "ccccccccccc",
+    ]);
   });
 
-  it("reads ScotteJaye's YouTube feed", async () => {
-    const deps = createDeps([videoA]);
+  it("reads the feed of every channel it watches", async () => {
+    const deps = { ...createDeps([videoA]), channels: [channelOne, channelTwo] };
 
     await pollJob(deps).run();
 
-    expect(deps.readFeed).toHaveBeenCalledExactlyOnceWith(
-      "https://www.youtube.com/feeds/videos.xml?channel_id=UCyMNUoiD0vlmFtiriDtVI5Q",
+    expect(deps.readFeed.mock.calls).toEqual([
+      ["https://www.youtube.com/feeds/videos.xml?channel_id=UC1111111111111111111111"],
+      ["https://www.youtube.com/feeds/videos.xml?channel_id=UC2222222222222222222222"],
+    ]);
+  });
+
+  it("records a newly watched channel's existing videos without posting them, while still posting the other channel's new videos", async () => {
+    const deps = {
+      ...createDeps([], { seen: [videoA], neverChecked: [channelTwo.youtubeChannelId] }),
+      channels: [channelOne, channelTwo],
+    };
+    deps.readFeed.mockImplementation((url) =>
+      Promise.resolve(url.endsWith(channelOne.youtubeChannelId) ? [videoB, videoA] : [videoC]),
     );
+
+    await pollJob(deps).run();
+
+    expect(deps.publish.mock.calls.map(([, message]) => message.content)).toEqual([
+      "🚨 NEW MADE-UP ONE VIDEO 🚨\nhttps://www.youtube.com/watch?v=bbbbbbbbbbb",
+    ]);
+    expect(deps.seenVideos.seenIn(channelTwo.youtubeChannelId)).toEqual(["ccccccccccc"]);
+  });
+
+  it("still checks the other channels when one channel's feed can't be read, then fails the check", async () => {
+    const deps = { ...createDeps([], { seen: [videoA] }), channels: [channelOne, channelTwo] };
+    deps.readFeed.mockImplementation((url) =>
+      url.endsWith(channelOne.youtubeChannelId)
+        ? Promise.reject(new Error("The YouTube feed answered HTTP 404."))
+        : Promise.resolve([videoB, videoA]),
+    );
+
+    expect(await checkFailure(deps)).toEqual({
+      message: "Couldn't check YouTube channel(s): Made-up One.",
+      causes: ["The YouTube feed answered HTTP 404."],
+    });
+
+    expect(deps.publish).toHaveBeenCalledExactlyOnceWith(alertChannelId, {
+      content: "🚨 NEW MADE-UP TWO VIDEO 🚨\nhttps://www.youtube.com/watch?v=bbbbbbbbbbb",
+      allowed_mentions: { parse: [] },
+      nonce: "yt-bbbbbbbbbbb",
+      enforce_nonce: true,
+    });
   });
 
   it("fails the check, recording and posting nothing, when the feed can't be read", async () => {
     const deps = createDeps([], { seen: [videoA] });
     deps.readFeed.mockRejectedValue(new Error("The YouTube feed answered HTTP 404."));
 
-    await expect(pollJob(deps).run()).rejects.toThrow("The YouTube feed answered HTTP 404.");
+    expect(await checkFailure(deps)).toEqual({
+      message: "Couldn't check YouTube channel(s): ScotteJaye.",
+      causes: ["The YouTube feed answered HTTP 404."],
+    });
 
     expect(deps.publish).not.toHaveBeenCalled();
-    expect([...deps.seenVideos.seen.keys()]).toEqual(["aaaaaaaaaaa"]);
+    expect(deps.seenVideos.seenIn(scotteJaye.youtubeChannelId)).toEqual(["aaaaaaaaaaa"]);
   });
 
   it("logs each video it posts", async () => {
@@ -209,7 +317,10 @@ describe("YouTube alert", () => {
   it("posts a video whose post failed on the next check, even after a newer video was posted", async () => {
     const deps = createDeps([videoC, videoB, videoA], { seen: [videoA] });
     deps.publish.mockRejectedValueOnce(new Error("Discord is down"));
-    await expect(pollJob(deps).run()).rejects.toThrow("Couldn't post or record 1 new video(s).");
+    expect(await checkFailure(deps)).toEqual({
+      message: "Couldn't check YouTube channel(s): ScotteJaye.",
+      causes: ["Couldn't post or record 1 new video(s)."],
+    });
 
     await pollJob(deps).run();
 
@@ -238,7 +349,10 @@ describe("YouTube alert", () => {
         : markSeen(channelId, videos);
     };
 
-    await expect(pollJob(deps).run()).rejects.toThrow("Couldn't post or record 1 new video(s).");
+    expect(await checkFailure(deps)).toEqual({
+      message: "Couldn't check YouTube channel(s): ScotteJaye.",
+      causes: ["Couldn't post or record 1 new video(s)."],
+    });
 
     expect(deps.publish.mock.calls.map(([, message]) => message.nonce)).toEqual([
       "yt-bbbbbbbbbbb",
