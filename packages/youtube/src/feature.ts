@@ -28,17 +28,17 @@ function byPublishTime(a: Video, b: Video): number {
   return a.publishedAt.getTime() - b.publishedAt.getTime();
 }
 
-// Checks each watched channel's feed and posts each new video once. A video is recorded only after its post
-// succeeds, so a failed post is retried at the next check. Before posting, the bot looks for the
+// Checks each watched channel's feed and posts each new video once. A video is recorded only after
+// its post succeeds, so a failed post is retried at the next check. Before posting, the bot looks for the
 // link among its own recent messages, so a post that succeeded before a crash isn't repeated, and
 // each post carries a nonce, so Discord drops a repeat of it sent within a few minutes.
 export function createYouTubeFeature(deps: YouTubeFeatureDeps): Feature {
   const pollChannel = async (channel: YouTubeChannel): Promise<void> => {
-    const channelId = channel.youtubeChannelId;
-    const videos = await deps.readFeed(feedUrl(channelId));
-    const history = await deps.seenVideos.history(channelId);
+    const { youtubeChannelId } = channel;
+    const videos = await deps.readFeed(feedUrl(youtubeChannelId));
+    const history = await deps.seenVideos.history(youtubeChannelId);
     if (!history.firstCheckDone) {
-      await deps.seenVideos.recordFirstCheck(channelId, videos);
+      await deps.seenVideos.recordFirstCheck(youtubeChannelId, videos);
       deps.logger.info(
         { event: "youtube.first_check", channel: channel.name, videos: videos.length },
         "Recorded the channel's existing videos without posting them",
@@ -52,7 +52,7 @@ export function createYouTubeFeature(deps: YouTubeFeatureDeps): Feature {
     const baseline = history.baselinePublishedAt;
     const older = unseen.filter((video) => baseline !== undefined && video.publishedAt <= baseline);
     if (older.length > 0) {
-      await deps.seenVideos.markSeen(channelId, older);
+      await deps.seenVideos.markSeen(youtubeChannelId, older);
       deps.logger.info(
         {
           event: "youtube.skipped_older",
@@ -71,7 +71,7 @@ export function createYouTubeFeature(deps: YouTubeFeatureDeps): Feature {
     const failures: unknown[] = [];
     for (const video of fresh) {
       if (alreadyPosted.some((post) => post.content.includes(video.url))) {
-        await deps.seenVideos.markSeen(channelId, [video]);
+        await deps.seenVideos.markSeen(youtubeChannelId, [video]);
         continue;
       }
       try {
@@ -86,7 +86,7 @@ export function createYouTubeFeature(deps: YouTubeFeatureDeps): Feature {
         continue;
       }
       try {
-        await deps.seenVideos.markSeen(channelId, [video]);
+        await deps.seenVideos.markSeen(youtubeChannelId, [video]);
       } catch (error) {
         // Posted but not recorded: the next check should find the post among the bot's own.
         failures.push(error);
@@ -108,20 +108,20 @@ export function createYouTubeFeature(deps: YouTubeFeatureDeps): Feature {
   // One channel failing doesn't stop the others being checked; the check then fails.
   const poll = async (): Promise<void> => {
     const failures: unknown[] = [];
+    const failedNames: string[] = [];
     for (const channel of deps.channels) {
       try {
         await pollChannel(channel);
       } catch (error) {
         failures.push(error);
+        failedNames.push(channel.name);
       }
     }
-    if (failures.length === 1) {
-      throw failures[0];
-    }
-    if (failures.length > 1) {
+    // The message names the channels only: a cause's own message can hold data the logger scrubs.
+    if (failures.length > 0) {
       throw new AggregateError(
         failures,
-        `Couldn't check ${String(failures.length)} YouTube channels.`,
+        `Couldn't check YouTube channel(s): ${failedNames.join(", ")}.`,
       );
     }
   };
