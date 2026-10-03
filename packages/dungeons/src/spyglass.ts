@@ -46,6 +46,8 @@ export interface SpyglassData {
   readonly build: string;
   readonly dungeons: readonly Dungeon[];
   readonly items: readonly ScannedItem[];
+  // Data files the listing named that GitHub doesn't have, by path under the data folder.
+  readonly missingFiles: readonly string[];
 }
 
 export type SpyglassReader = () => Promise<SpyglassData>;
@@ -57,6 +59,15 @@ export interface SpyglassReaderOptions {
 const repository = "Karl-HeinzSchneider/WoW-Spyglass";
 const dataPath = ".contribute/data";
 
+const commitId = z.string().regex(/^[0-9a-f]{40}$/);
+
+type ListedFile = { readonly found: true; readonly body: unknown } | { readonly found: false };
+const notFound: ListedFile = { found: false };
+
+function failed(response: Response, url: string): Error {
+  return new Error(`The server answered HTTP ${String(response.status)} for ${url}.`);
+}
+
 const config = z.object({ build: z.string() });
 
 const listing = z.object({ files: z.array(z.object({ name: z.string() })) });
@@ -65,6 +76,8 @@ const listing = z.object({ files: z.array(z.object({ name: z.string() })) });
 // item file's, such as "/.contribute/data/items/items_270000.json".
 const dungeonFilePath = /^\/\.contribute\/data\/(dungeons\/[a-z0-9_]+\.json)$/;
 const itemFilePath = /^\/\.contribute\/data\/(items\/items_\d+\.json)$/;
+// A dungeon's quest file, such as "/.contribute/data/quests/dungeons/deadmines.json".
+const questFilePath = /^\/\.contribute\/data\/(quests\/dungeons\/[a-z0-9_]+\.json)$/;
 
 // A quest as Spyglass lists it. Only the ID and name are needed; a detail that isn't what's
 // expected is left out rather than failing the quest.
@@ -82,6 +95,8 @@ const questEntry = z.object({
     .catch(undefined),
 });
 
+const questId = z.int().positive();
+
 const dungeonFile = z.object({
   name: z.string(),
   minLevel: z.int().optional(),
@@ -93,9 +108,17 @@ const dungeonFile = z.object({
       loot: z.array(z.object({ item: z.int().positive(), name: z.string() })),
     }),
   ),
-  // Each quest is read on its own (`questEntry`), so one odd quest doesn't fail the sync.
-  quests: z.array(z.unknown()).optional(),
+  // The IDs of the dungeon's quests, whose details are in its quest file. One it can't read is
+  // left out, so one odd quest doesn't fail the sync.
+  quests: z
+    .array(z.unknown())
+    .optional()
+    .transform((ids) => (ids ?? []).flatMap((id) => questId.safeParse(id).data ?? [])),
 });
+
+// A dungeon's quest file: its quests, and the quests leading up to them, which happen outside it.
+// Each quest is read on its own (`questEntry`), so one odd quest doesn't fail the sync.
+const questFile = z.object({ quests: z.array(z.unknown()) });
 
 // Items by ID. An item without an English name is left out.
 const itemFile = z.record(
@@ -114,34 +137,72 @@ const itemFile = z.record(
 
 // Reads Forever's dungeons and items from Spyglass, an MIT-licensed addon whose maintainers scan the
 // game and publish what they find on GitHub: its config names the build, each dungeon has its own
-// file, and items come in files of up to 10,000 IDs. jsDelivr lists the files, since GitHub's API
-// allows only 60 requests an hour from an IP address without a key, and Railway's addresses are
-// shared.
+// file, and items come in files of up to 10,000 IDs. Everything is read from its latest commit, so
+// the listing and the files match. GitHub's API names the commit, in one request a sync, since it
+// allows only 60 an hour from an IP address without a key, and Railway's addresses are shared.
+// jsDelivr lists the files at that commit; its listing of the main branch is cached for up to a
+// year.
 export function createSpyglassReader(options: SpyglassReaderOptions): SpyglassReader {
-  const get = async (url: string): Promise<unknown> => {
-    const response = await options.fetch(url, { signal: AbortSignal.timeout(30_000) });
+  const request = (url: string, headers: Record<string, string> = {}): Promise<Response> =>
+    options.fetch(url, { headers, signal: AbortSignal.timeout(30_000) });
+  const answer = async (url: string, headers?: Record<string, string>): Promise<Response> => {
+    const response = await request(url, headers);
     if (!response.ok) {
-      throw new Error(`The server answered HTTP ${String(response.status)} for ${url}.`);
+      throw failed(response, url);
     }
-    return response.json();
+    return response;
   };
-  const raw = (path: string): Promise<unknown> =>
-    get(`https://raw.githubusercontent.com/${repository}/main/${dataPath}/${path}`);
+  const get = async (url: string): Promise<unknown> => (await answer(url)).json();
 
   return async () => {
+    const latest = await answer(`https://api.github.com/repos/${repository}/commits/main`, {
+      accept: "application/vnd.github.sha",
+    });
+    const commit = commitId.parse((await latest.text()).trim());
+    const rawUrl = (path: string): string =>
+      `https://raw.githubusercontent.com/${repository}/${commit}/${dataPath}/${path}`;
+    const raw = (path: string): Promise<unknown> => get(rawUrl(path));
+    const missingFiles: string[] = [];
+    // A file the listing names, which is noted as missing if GitHub and jsDelivr disagree.
+    const listedFile = async (path: string): Promise<ListedFile> => {
+      const url = rawUrl(path);
+      const response = await request(url);
+      if (response.status === 404) {
+        missingFiles.push(path);
+        return notFound;
+      }
+      if (!response.ok) {
+        throw failed(response, url);
+      }
+      return { found: true, body: await response.json() };
+    };
+
     const { build } = config.parse(await raw("config.json"));
     const { files } = listing.parse(
-      await get(`https://data.jsdelivr.com/v1/packages/gh/${repository}@main?structure=flat`),
+      await get(`https://data.jsdelivr.com/v1/packages/gh/${repository}@${commit}?structure=flat`),
     );
     const pathsMatching = (pattern: RegExp): string[] =>
       files.flatMap((file) => pattern.exec(file.name)?.[1] ?? []);
+    const questPaths = new Set(pathsMatching(questFilePath));
 
     const dungeons: Dungeon[] = [];
     for (const path of pathsMatching(dungeonFilePath)) {
-      const dungeon = dungeonFile.parse(await raw(path));
+      const file = await listedFile(path);
+      if (!file.found) {
+        continue;
+      }
+      const dungeon = dungeonFile.parse(file.body);
       if (dungeon.minLevel === undefined || dungeon.maxLevel === undefined) {
         continue;
       }
+      const questPath = `quests/${path}`;
+      const questsFile = questPaths.has(questPath) ? await listedFile(questPath) : notFound;
+      const quests = questsFile.found
+        ? questFile.parse(questsFile.body).quests.flatMap((entry) => {
+            const parsed = questEntry.safeParse(entry);
+            return parsed.success ? [parsed.data] : [];
+          })
+        : [];
       dungeons.push({
         name: dungeon.name,
         minLevel: dungeon.minLevel,
@@ -151,11 +212,8 @@ export function createSpyglassReader(options: SpyglassReaderOptions): SpyglassRe
           name: encounter.name,
           loot: encounter.loot.map((item) => ({ itemId: item.item, name: item.name })),
         })),
-        quests: (dungeon.quests ?? [])
-          .flatMap((entry) => {
-            const parsed = questEntry.safeParse(entry);
-            return parsed.success ? [parsed.data] : [];
-          })
+        quests: dungeon.quests
+          .flatMap((id) => quests.find((quest) => quest.id === id) ?? [])
           .map((quest) => ({
             id: quest.id,
             name: quest.name,
@@ -171,7 +229,11 @@ export function createSpyglassReader(options: SpyglassReaderOptions): SpyglassRe
 
     const items: ScannedItem[] = [];
     for (const path of pathsMatching(itemFilePath)) {
-      for (const [id, item] of Object.entries(itemFile.parse(await raw(path)))) {
+      const file = await listedFile(path);
+      if (!file.found) {
+        continue;
+      }
+      for (const [id, item] of Object.entries(itemFile.parse(file.body))) {
         const name = item.names.enUS;
         if (name === undefined) {
           continue;
@@ -189,6 +251,6 @@ export function createSpyglassReader(options: SpyglassReaderOptions): SpyglassRe
         });
       }
     }
-    return { build, dungeons, items };
+    return { build, dungeons, items, missingFiles };
   };
 }

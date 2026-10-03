@@ -11,7 +11,7 @@ function synced(
   dungeons: readonly Dungeon[],
   items: readonly ScannedItem[] = [],
 ): SpyglassData {
-  return { build, dungeons, items };
+  return { build, dungeons, items, missingFiles: [] };
 }
 
 // A made-up dungeon with two bosses, one with loot seen, and two quests, one scanned in full.
