@@ -61,6 +61,13 @@ const dataPath = ".contribute/data";
 
 const commitId = z.string().regex(/^[0-9a-f]{40}$/);
 
+type ListedFile = { readonly found: true; readonly body: unknown } | { readonly found: false };
+const notFound: ListedFile = { found: false };
+
+function failed(response: Response, url: string): Error {
+  return new Error(`The server answered HTTP ${String(response.status)} for ${url}.`);
+}
+
 const config = z.object({ build: z.string() });
 
 const listing = z.object({ files: z.array(z.object({ name: z.string() })) });
@@ -88,6 +95,8 @@ const questEntry = z.object({
     .catch(undefined),
 });
 
+const questId = z.int().positive();
+
 const dungeonFile = z.object({
   name: z.string(),
   minLevel: z.int().optional(),
@@ -99,8 +108,12 @@ const dungeonFile = z.object({
       loot: z.array(z.object({ item: z.int().positive(), name: z.string() })),
     }),
   ),
-  // The IDs of the dungeon's quests, whose details are in its quest file.
-  quests: z.array(z.int().positive()).optional(),
+  // The IDs of the dungeon's quests, whose details are in its quest file. One it can't read is
+  // left out, so one odd quest doesn't fail the sync.
+  quests: z
+    .array(z.unknown())
+    .optional()
+    .transform((ids) => (ids ?? []).flatMap((id) => questId.safeParse(id).data ?? [])),
 });
 
 // A dungeon's quest file: its quests, and the quests leading up to them, which happen outside it.
@@ -130,38 +143,36 @@ const itemFile = z.record(
 // jsDelivr lists the files at that commit; its listing of the main branch is cached for up to a
 // year.
 export function createSpyglassReader(options: SpyglassReaderOptions): SpyglassReader {
-  const answer = async (url: string, headers: Record<string, string> = {}): Promise<Response> => {
-    const response = await options.fetch(url, { headers, signal: AbortSignal.timeout(30_000) });
+  const request = (url: string, headers: Record<string, string> = {}): Promise<Response> =>
+    options.fetch(url, { headers, signal: AbortSignal.timeout(30_000) });
+  const answer = async (url: string, headers?: Record<string, string>): Promise<Response> => {
+    const response = await request(url, headers);
     if (!response.ok) {
-      throw new Error(`The server answered HTTP ${String(response.status)} for ${url}.`);
+      throw failed(response, url);
     }
     return response;
   };
   const get = async (url: string): Promise<unknown> => (await answer(url)).json();
 
   return async () => {
-    const commit = commitId.parse(
-      (
-        await (
-          await answer(`https://api.github.com/repos/${repository}/commits/main`, {
-            accept: "application/vnd.github.sha",
-          })
-        ).text()
-      ).trim(),
-    );
+    const latest = await answer(`https://api.github.com/repos/${repository}/commits/main`, {
+      accept: "application/vnd.github.sha",
+    });
+    const commit = commitId.parse((await latest.text()).trim());
     const rawUrl = (path: string): string =>
       `https://raw.githubusercontent.com/${repository}/${commit}/${dataPath}/${path}`;
     const raw = (path: string): Promise<unknown> => get(rawUrl(path));
-    // A file the listing names, which may still be missing if GitHub and jsDelivr disagree.
-    const listedFile = async (
-      path: string,
-    ): Promise<{ readonly found: true; readonly body: unknown } | { readonly found: false }> => {
-      const response = await options.fetch(rawUrl(path), { signal: AbortSignal.timeout(30_000) });
+    const missingFiles: string[] = [];
+    // A file the listing names, which is noted as missing if GitHub and jsDelivr disagree.
+    const listedFile = async (path: string): Promise<ListedFile> => {
+      const url = rawUrl(path);
+      const response = await request(url);
       if (response.status === 404) {
-        return { found: false };
+        missingFiles.push(path);
+        return notFound;
       }
       if (!response.ok) {
-        throw new Error(`The server answered HTTP ${String(response.status)} for ${rawUrl(path)}.`);
+        throw failed(response, url);
       }
       return { found: true, body: await response.json() };
     };
@@ -174,12 +185,10 @@ export function createSpyglassReader(options: SpyglassReaderOptions): SpyglassRe
       files.flatMap((file) => pattern.exec(file.name)?.[1] ?? []);
     const questPaths = new Set(pathsMatching(questFilePath));
 
-    const missingFiles: string[] = [];
     const dungeons: Dungeon[] = [];
     for (const path of pathsMatching(dungeonFilePath)) {
       const file = await listedFile(path);
       if (!file.found) {
-        missingFiles.push(path);
         continue;
       }
       const dungeon = dungeonFile.parse(file.body);
@@ -187,8 +196,9 @@ export function createSpyglassReader(options: SpyglassReaderOptions): SpyglassRe
         continue;
       }
       const questPath = `quests/${path}`;
-      const quests = questPaths.has(questPath)
-        ? questFile.parse(await raw(questPath)).quests.flatMap((entry) => {
+      const questsFile = questPaths.has(questPath) ? await listedFile(questPath) : notFound;
+      const quests = questsFile.found
+        ? questFile.parse(questsFile.body).quests.flatMap((entry) => {
             const parsed = questEntry.safeParse(entry);
             return parsed.success ? [parsed.data] : [];
           })
@@ -202,7 +212,7 @@ export function createSpyglassReader(options: SpyglassReaderOptions): SpyglassRe
           name: encounter.name,
           loot: encounter.loot.map((item) => ({ itemId: item.item, name: item.name })),
         })),
-        quests: (dungeon.quests ?? [])
+        quests: dungeon.quests
           .flatMap((id) => quests.find((quest) => quest.id === id) ?? [])
           .map((quest) => ({
             id: quest.id,
@@ -221,7 +231,6 @@ export function createSpyglassReader(options: SpyglassReaderOptions): SpyglassRe
     for (const path of pathsMatching(itemFilePath)) {
       const file = await listedFile(path);
       if (!file.found) {
-        missingFiles.push(path);
         continue;
       }
       for (const [id, item] of Object.entries(itemFile.parse(file.body))) {

@@ -307,6 +307,19 @@ describe("createSpyglassReader", () => {
     ]);
   });
 
+  it("leaves out a quest ID it can't read, keeping the dungeon's other quests", async () => {
+    const fetch = createFakeFetch({
+      "dungeons/the_made_up_hollow.json": { ...madeUpHollow, quests: [null, "90102", 90_101] },
+      "quests/dungeons/the_made_up_hollow.json": {
+        quests: [{ id: 90_101, name: "Made-up Errand" }],
+      },
+    });
+
+    const { dungeons } = await createSpyglassReader({ fetch })();
+
+    expect(dungeons[0]?.quests.map((quest) => quest.name)).toEqual(["Made-up Errand"]);
+  });
+
   it("leaves out an item without an English name", async () => {
     const fetch = createFakeFetch({
       "items/items_280000.json": {
@@ -354,6 +367,20 @@ describe("createSpyglassReader", () => {
 
     expect(dungeons.map((dungeon) => dungeon.name)).toEqual(["The Made-up Hollow"]);
     expect(missingFiles).toEqual(["dungeons/made_up_gone.json"]);
+  });
+
+  it("skips a quest file the listing names but GitHub doesn't have, keeping the dungeon", async () => {
+    const fetch = createFakeFetch(
+      { "dungeons/the_made_up_hollow.json": { ...madeUpHollow, quests: [90_101] } },
+      ["quests/dungeons/the_made_up_hollow.json"],
+    );
+
+    const { dungeons, missingFiles } = await createSpyglassReader({ fetch })();
+
+    expect(dungeons.map((dungeon) => [dungeon.name, dungeon.quests])).toEqual([
+      ["The Made-up Hollow", []],
+    ]);
+    expect(missingFiles).toEqual(["quests/dungeons/the_made_up_hollow.json"]);
   });
 
   it("skips an item file the listing names but GitHub doesn't have, reading the rest", async () => {
