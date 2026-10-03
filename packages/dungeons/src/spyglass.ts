@@ -46,6 +46,8 @@ export interface SpyglassData {
   readonly build: string;
   readonly dungeons: readonly Dungeon[];
   readonly items: readonly ScannedItem[];
+  // Data files the listing named that GitHub doesn't have, by path under the data folder.
+  readonly missingFiles: readonly string[];
 }
 
 export type SpyglassReader = () => Promise<SpyglassData>;
@@ -57,6 +59,8 @@ export interface SpyglassReaderOptions {
 const repository = "Karl-HeinzSchneider/WoW-Spyglass";
 const dataPath = ".contribute/data";
 
+const commitId = z.string().regex(/^[0-9a-f]{40}$/);
+
 const config = z.object({ build: z.string() });
 
 const listing = z.object({ files: z.array(z.object({ name: z.string() })) });
@@ -65,6 +69,8 @@ const listing = z.object({ files: z.array(z.object({ name: z.string() })) });
 // item file's, such as "/.contribute/data/items/items_270000.json".
 const dungeonFilePath = /^\/\.contribute\/data\/(dungeons\/[a-z0-9_]+\.json)$/;
 const itemFilePath = /^\/\.contribute\/data\/(items\/items_\d+\.json)$/;
+// A dungeon's quest file, such as "/.contribute/data/quests/dungeons/deadmines.json".
+const questFilePath = /^\/\.contribute\/data\/(quests\/dungeons\/[a-z0-9_]+\.json)$/;
 
 // A quest as Spyglass lists it. Only the ID and name are needed; a detail that isn't what's
 // expected is left out rather than failing the quest.
@@ -93,9 +99,13 @@ const dungeonFile = z.object({
       loot: z.array(z.object({ item: z.int().positive(), name: z.string() })),
     }),
   ),
-  // Each quest is read on its own (`questEntry`), so one odd quest doesn't fail the sync.
-  quests: z.array(z.unknown()).optional(),
+  // The IDs of the dungeon's quests, whose details are in its quest file.
+  quests: z.array(z.int().positive()).optional(),
 });
+
+// A dungeon's quest file: its quests, and the quests leading up to them, which happen outside it.
+// Each quest is read on its own (`questEntry`), so one odd quest doesn't fail the sync.
+const questFile = z.object({ quests: z.array(z.unknown()) });
 
 // Items by ID. An item without an English name is left out.
 const itemFile = z.record(
@@ -114,34 +124,75 @@ const itemFile = z.record(
 
 // Reads Forever's dungeons and items from Spyglass, an MIT-licensed addon whose maintainers scan the
 // game and publish what they find on GitHub: its config names the build, each dungeon has its own
-// file, and items come in files of up to 10,000 IDs. jsDelivr lists the files, since GitHub's API
-// allows only 60 requests an hour from an IP address without a key, and Railway's addresses are
-// shared.
+// file, and items come in files of up to 10,000 IDs. Everything is read from its latest commit, so
+// the listing and the files match. GitHub's API names the commit, in one request a sync, since it
+// allows only 60 an hour from an IP address without a key, and Railway's addresses are shared.
+// jsDelivr lists the files at that commit; its listing of the main branch is cached for up to a
+// year.
 export function createSpyglassReader(options: SpyglassReaderOptions): SpyglassReader {
-  const get = async (url: string): Promise<unknown> => {
-    const response = await options.fetch(url, { signal: AbortSignal.timeout(30_000) });
+  const answer = async (url: string, headers: Record<string, string> = {}): Promise<Response> => {
+    const response = await options.fetch(url, { headers, signal: AbortSignal.timeout(30_000) });
     if (!response.ok) {
       throw new Error(`The server answered HTTP ${String(response.status)} for ${url}.`);
     }
-    return response.json();
+    return response;
   };
-  const raw = (path: string): Promise<unknown> =>
-    get(`https://raw.githubusercontent.com/${repository}/main/${dataPath}/${path}`);
+  const get = async (url: string): Promise<unknown> => (await answer(url)).json();
 
   return async () => {
+    const commit = commitId.parse(
+      (
+        await (
+          await answer(`https://api.github.com/repos/${repository}/commits/main`, {
+            accept: "application/vnd.github.sha",
+          })
+        ).text()
+      ).trim(),
+    );
+    const rawUrl = (path: string): string =>
+      `https://raw.githubusercontent.com/${repository}/${commit}/${dataPath}/${path}`;
+    const raw = (path: string): Promise<unknown> => get(rawUrl(path));
+    // A file the listing names, which may still be missing if GitHub and jsDelivr disagree.
+    const listedFile = async (
+      path: string,
+    ): Promise<{ readonly found: true; readonly body: unknown } | { readonly found: false }> => {
+      const response = await options.fetch(rawUrl(path), { signal: AbortSignal.timeout(30_000) });
+      if (response.status === 404) {
+        return { found: false };
+      }
+      if (!response.ok) {
+        throw new Error(`The server answered HTTP ${String(response.status)} for ${rawUrl(path)}.`);
+      }
+      return { found: true, body: await response.json() };
+    };
+
     const { build } = config.parse(await raw("config.json"));
     const { files } = listing.parse(
-      await get(`https://data.jsdelivr.com/v1/packages/gh/${repository}@main?structure=flat`),
+      await get(`https://data.jsdelivr.com/v1/packages/gh/${repository}@${commit}?structure=flat`),
     );
     const pathsMatching = (pattern: RegExp): string[] =>
       files.flatMap((file) => pattern.exec(file.name)?.[1] ?? []);
+    const questPaths = new Set(pathsMatching(questFilePath));
 
+    const missingFiles: string[] = [];
     const dungeons: Dungeon[] = [];
     for (const path of pathsMatching(dungeonFilePath)) {
-      const dungeon = dungeonFile.parse(await raw(path));
+      const file = await listedFile(path);
+      if (!file.found) {
+        missingFiles.push(path);
+        continue;
+      }
+      const dungeon = dungeonFile.parse(file.body);
       if (dungeon.minLevel === undefined || dungeon.maxLevel === undefined) {
         continue;
       }
+      const questPath = `quests/${path}`;
+      const quests = questPaths.has(questPath)
+        ? questFile.parse(await raw(questPath)).quests.flatMap((entry) => {
+            const parsed = questEntry.safeParse(entry);
+            return parsed.success ? [parsed.data] : [];
+          })
+        : [];
       dungeons.push({
         name: dungeon.name,
         minLevel: dungeon.minLevel,
@@ -152,10 +203,7 @@ export function createSpyglassReader(options: SpyglassReaderOptions): SpyglassRe
           loot: encounter.loot.map((item) => ({ itemId: item.item, name: item.name })),
         })),
         quests: (dungeon.quests ?? [])
-          .flatMap((entry) => {
-            const parsed = questEntry.safeParse(entry);
-            return parsed.success ? [parsed.data] : [];
-          })
+          .flatMap((id) => quests.find((quest) => quest.id === id) ?? [])
           .map((quest) => ({
             id: quest.id,
             name: quest.name,
@@ -171,7 +219,12 @@ export function createSpyglassReader(options: SpyglassReaderOptions): SpyglassRe
 
     const items: ScannedItem[] = [];
     for (const path of pathsMatching(itemFilePath)) {
-      for (const [id, item] of Object.entries(itemFile.parse(await raw(path)))) {
+      const file = await listedFile(path);
+      if (!file.found) {
+        missingFiles.push(path);
+        continue;
+      }
+      for (const [id, item] of Object.entries(itemFile.parse(file.body))) {
         const name = item.names.enUS;
         if (name === undefined) {
           continue;
@@ -189,6 +242,6 @@ export function createSpyglassReader(options: SpyglassReaderOptions): SpyglassRe
         });
       }
     }
-    return { build, dungeons, items };
+    return { build, dungeons, items, missingFiles };
   };
 }

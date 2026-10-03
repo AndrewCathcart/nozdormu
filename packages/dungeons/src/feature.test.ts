@@ -43,8 +43,17 @@ function items(count: number): ScannedItem[] {
   }));
 }
 
-function synced(dungeonCount: number, itemCount: number): SpyglassData {
-  return { build: "1.60.1.69913", dungeons: dungeons(dungeonCount), items: items(itemCount) };
+function synced(
+  dungeonCount: number,
+  itemCount: number,
+  missingFiles: readonly string[] = [],
+): SpyglassData {
+  return {
+    build: "1.60.1.69913",
+    dungeons: dungeons(dungeonCount),
+    items: items(itemCount),
+    missingFiles,
+  };
 }
 
 function createDeps(found: SpyglassData) {
@@ -56,7 +65,10 @@ function createDeps(found: SpyglassData) {
       list: vi.fn<DungeonStore["list"]>().mockResolvedValue([]),
       loadedBuild: vi.fn<DungeonStore["loadedBuild"]>().mockResolvedValue(undefined),
     } satisfies DungeonStore,
-    logger: { info: vi.fn<Logger["info"]>() } satisfies Pick<Logger, "info">,
+    logger: {
+      info: vi.fn<Logger["info"]>(),
+      warn: vi.fn<Logger["warn"]>(),
+    } satisfies Pick<Logger, "info" | "warn">,
   } satisfies DungeonFeatureDeps;
 }
 
@@ -92,6 +104,18 @@ describe("createDungeonFeature", () => {
         items: 10_000,
       },
       "Synced Forever's dungeons and items from Spyglass",
+    );
+  });
+
+  it("warns, naming them, about files Spyglass's listing named but GitHub doesn't have", async () => {
+    const deps = createDeps(synced(25, 10_000, ["dungeons/made_up_gone.json"]));
+
+    await syncJob(deps).run();
+
+    expect(deps.store.replaceAll).toHaveBeenCalledOnce();
+    expect(deps.logger.warn).toHaveBeenCalledExactlyOnceWith(
+      { event: "dungeons.files_missing", files: ["dungeons/made_up_gone.json"] },
+      "Skipped files Spyglass's listing named but GitHub doesn't have",
     );
   });
 

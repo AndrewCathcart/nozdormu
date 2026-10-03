@@ -2,10 +2,14 @@ import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { createSpyglassReader } from "./spyglass.ts";
 
-const listing =
+// Spyglass's latest commit, made up.
+const commit = "0123456789abcdef0123456789abcdef01234567";
+const latestCommit = "https://api.github.com/repos/Karl-HeinzSchneider/WoW-Spyglass/commits/main";
+const listing = `https://data.jsdelivr.com/v1/packages/gh/Karl-HeinzSchneider/WoW-Spyglass@${commit}?structure=flat`;
+// jsDelivr caches its listing of the main branch for up to a year, so it can name files long gone.
+const staleListing =
   "https://data.jsdelivr.com/v1/packages/gh/Karl-HeinzSchneider/WoW-Spyglass@main?structure=flat";
-const data =
-  "https://raw.githubusercontent.com/Karl-HeinzSchneider/WoW-Spyglass/main/.contribute/data";
+const data = `https://raw.githubusercontent.com/Karl-HeinzSchneider/WoW-Spyglass/${commit}/.contribute/data`;
 
 // A made-up dungeon file in Spyglass's shape.
 const madeUpHollow = {
@@ -52,11 +56,23 @@ function urlOf(input: string | URL | Request): string {
   return input instanceof Request ? input.url : input instanceof URL ? input.href : input;
 }
 
-// Answers Spyglass's config, the listing of its repository's files (these data files, by path under
-// its data folder, and one that isn't data) and each data file.
-function createFakeFetch(files: Readonly<Record<string, unknown>>) {
+// Answers Spyglass's latest commit, its config, the listing of its repository's files at that
+// commit (these data files, by path under its data folder, one that isn't data, and any listed but
+// missing), a stale listing of its main branch, and each data file.
+function createFakeFetch(
+  files: Readonly<Record<string, unknown>>,
+  missing: readonly string[] = [],
+) {
   return vi.fn<typeof fetch>((input) => {
     const url = urlOf(input);
+    if (url === latestCommit) {
+      return Promise.resolve(new Response(commit, { status: 200 }));
+    }
+    if (url === staleListing) {
+      return Promise.resolve(
+        json({ files: [{ name: "/.contribute/data/dungeons/made_up_long_gone.json" }] }),
+      );
+    }
     if (url === `${data}/config.json`) {
       return Promise.resolve(json({ build: "1.60.1.69913", itemsPerFile: 2500 }));
     }
@@ -65,7 +81,9 @@ function createFakeFetch(files: Readonly<Record<string, unknown>>) {
         json({
           files: [
             { name: "/README.md" },
-            ...Object.keys(files).map((path) => ({ name: `/.contribute/data/${path}` })),
+            ...[...Object.keys(files), ...missing].map((path) => ({
+              name: `/.contribute/data/${path}`,
+            })),
           ],
         }),
       );
@@ -103,13 +121,15 @@ describe("createSpyglassReader", () => {
         },
       ],
       items: [],
+      missingFiles: [],
     });
   });
 
-  it("reads each dungeon's quests, with whatever has been scanned of each", async () => {
+  it("reads the dungeon's quests from its quest file, with whatever has been scanned of each", async () => {
     const fetch = createFakeFetch({
-      "dungeons/the_made_up_hollow.json": {
-        ...madeUpHollow,
+      "dungeons/the_made_up_hollow.json": { ...madeUpHollow, quests: [90_101, 90_102] },
+      "quests/dungeons/the_made_up_hollow.json": {
+        npcs: { "Made-up Trainer": { location: [1436, 53, 53.3], description: "A made-up inn." } },
         quests: [
           {
             id: 90_101,
@@ -119,9 +139,14 @@ describe("createSpyglassReader", () => {
             requiredLevel: 12,
             xp: 1450,
             objective: "Bring 5 Made-up Fangs to a made-up trainer.",
+            requires: [90_100],
+            start: { npc: "Made-up Trainer" },
+            turnIn: { npc: "Made-up Trainer" },
             items: [{ item: 280_103, name: "Made-up Staff" }],
           },
           { id: 90_102, name: "Made-up Rumour" },
+          // A quest leading up to the dungeon's, which happens outside it.
+          { id: 90_100, name: "Made-up Prelude" },
         ],
       },
     });
@@ -237,6 +262,7 @@ describe("createSpyglassReader", () => {
     await createSpyglassReader({ fetch })();
 
     expect(fetch.mock.calls.map(([input]) => urlOf(input))).toEqual([
+      latestCommit,
       `${data}/config.json`,
       listing,
       `${data}/dungeons/the_made_up_hollow.json`,
@@ -245,8 +271,8 @@ describe("createSpyglassReader", () => {
 
   it("drops quest details it can't read, and quests without an ID and name, keeping the rest", async () => {
     const fetch = createFakeFetch({
-      "dungeons/the_made_up_hollow.json": {
-        ...madeUpHollow,
+      "dungeons/the_made_up_hollow.json": { ...madeUpHollow, quests: [90_101, 90_103] },
+      "quests/dungeons/the_made_up_hollow.json": {
         quests: [
           { id: 90_101, name: "Made-up Errand", side: "Neutral", xp: null, objective: 5 },
           { name: "Made-up Nameless Errand Without An ID" },
@@ -319,13 +345,61 @@ describe("createSpyglassReader", () => {
     await expect(createSpyglassReader({ fetch })()).rejects.toBeInstanceOf(z.ZodError);
   });
 
+  it("skips a dungeon file the listing names but GitHub doesn't have, reading the rest", async () => {
+    const fetch = createFakeFetch({ "dungeons/made_up_hollow.json": madeUpHollow }, [
+      "dungeons/made_up_gone.json",
+    ]);
+
+    const { dungeons, missingFiles } = await createSpyglassReader({ fetch })();
+
+    expect(dungeons.map((dungeon) => dungeon.name)).toEqual(["The Made-up Hollow"]);
+    expect(missingFiles).toEqual(["dungeons/made_up_gone.json"]);
+  });
+
+  it("skips an item file the listing names but GitHub doesn't have, reading the rest", async () => {
+    const fetch = createFakeFetch(
+      {
+        "items/items_280000.json": {
+          "280101": {
+            names: { enUS: "Made-up Choker" },
+            quality: 3,
+            itemLevel: 18,
+            reqLevel: 13,
+            classID: 4,
+            subclassID: 0,
+            slot: "INVTYPE_NECK",
+          },
+        },
+      },
+      ["items/items_290000.json"],
+    );
+
+    const { items, missingFiles } = await createSpyglassReader({ fetch })();
+
+    expect(items.map((item) => item.name)).toEqual(["Made-up Choker"]);
+    expect(missingFiles).toEqual(["items/items_290000.json"]);
+  });
+
+  it("fails, naming the file, when GitHub doesn't answer for a listed file", async () => {
+    const listed = createFakeFetch({ "dungeons/made_up_hollow.json": madeUpHollow });
+    const fetch = vi.fn<typeof globalThis.fetch>((input, init) =>
+      urlOf(input) === `${data}/dungeons/made_up_hollow.json`
+        ? Promise.resolve(new Response("Service Unavailable", { status: 503 }))
+        : listed(input, init),
+    );
+
+    await expect(createSpyglassReader({ fetch })()).rejects.toThrow(
+      new Error(`The server answered HTTP 503 for ${data}/dungeons/made_up_hollow.json.`),
+    );
+  });
+
   it("fails, naming the page, when a server doesn't answer", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>(() =>
       Promise.resolve(new Response("Service Unavailable", { status: 503 })),
     );
 
     await expect(createSpyglassReader({ fetch })()).rejects.toThrow(
-      new Error(`The server answered HTTP 503 for ${data}/config.json.`),
+      new Error(`The server answered HTTP 503 for ${latestCommit}.`),
     );
   });
 });

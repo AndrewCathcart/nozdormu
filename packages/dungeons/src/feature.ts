@@ -6,7 +6,7 @@ import type { SpyglassReader } from "./spyglass.ts";
 export interface DungeonFeatureDeps {
   readonly readSpyglass: SpyglassReader;
   readonly store: DungeonStore;
-  readonly logger: Pick<Logger, "info">;
+  readonly logger: Pick<Logger, "info" | "warn">;
 }
 
 // Spyglass lists 29 Forever dungeons and wings, and about 23,000 scanned items. A read with far
@@ -18,7 +18,13 @@ const minItems = 10_000;
 export function createDungeonFeature(deps: DungeonFeatureDeps): Feature {
   const sync = async (): Promise<void> => {
     const synced = await deps.readSpyglass();
-    const { build, dungeons, items } = synced;
+    const { build, dungeons, items, missingFiles } = synced;
+    if (missingFiles.length > 0) {
+      deps.logger.warn(
+        { event: "dungeons.files_missing", files: missingFiles },
+        "Skipped files Spyglass's listing named but GitHub doesn't have",
+      );
+    }
     if (dungeons.length < minDungeons) {
       throw new Error(
         `Spyglass listed only ${String(dungeons.length)} Forever dungeons, so the stored data was kept.`,
