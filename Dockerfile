@@ -1,5 +1,5 @@
 # The image Railway runs. There's no build step: Node runs the TypeScript directly.
-FROM node:26.10.0-slim
+FROM node:26.12.0-slim
 
 WORKDIR /app
 COPY . .
