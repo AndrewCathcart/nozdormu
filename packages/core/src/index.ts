@@ -13,12 +13,19 @@ export type {
 export { createRegistry, maxAutocompleteChoices } from "./registry.ts";
 export type { DispatchResult, PressResult, Registry } from "./registry.ts";
 export {
+  createChannelNamer,
   createChannelPublisher,
   createRecentPostReader,
   registerGuildCommands,
   routeInteractions,
 } from "./discord.ts";
-export type { ChannelMessage, ChannelPublisher, RecentPost, RecentPostReader } from "./discord.ts";
+export type {
+  ChannelMessage,
+  ChannelNamer,
+  ChannelPublisher,
+  RecentPost,
+  RecentPostReader,
+} from "./discord.ts";
 export { serializeError } from "./errors.ts";
 export { escapeMarkdown } from "./markdown.ts";
 export type { SerializedError } from "./errors.ts";

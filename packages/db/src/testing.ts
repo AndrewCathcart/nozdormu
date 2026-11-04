@@ -39,10 +39,13 @@ async function withAdminConnection<T>(work: (sql: postgres.Sql) => Promise<T>): 
   }
 }
 
+// A database made from scratch is UTF-8, as production's is, whatever the server's default: a
+// server set up on Windows defaults to its code page, which can't store emoji. Copies of the
+// template keep its encoding.
 async function createDatabase(name: string, template?: string): Promise<void> {
   await withAdminConnection(async (sql) => {
     await (template === undefined
-      ? sql`create database ${sql(checkedName(name))}`
+      ? sql`create database ${sql(checkedName(name))} encoding 'UTF8' template template0`
       : sql`create database ${sql(checkedName(name))} template ${sql(checkedName(template))}`);
   });
 }

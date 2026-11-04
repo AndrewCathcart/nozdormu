@@ -15,6 +15,10 @@ export type Milestone = {
       readonly at: Date;
       // The words once it's here, such as "WoW: Forever is live".
       readonly arrived: string;
+      // If set, the news channel's name counts down for the day before, starting with this, such as
+      // "⏳forever-in" for "⏳forever-in-22h-50m". Discord writes text channel names in lower case
+      // with dashes for spaces.
+      readonly channelCountdown?: string;
     }
   // "on" is 09:00 Paris time on the day; the week's notice goes out 7 days before.
   | { readonly kind: "day"; readonly on: Date }
@@ -30,6 +34,7 @@ export const foreverMilestones: readonly Milestone[] = [
     at: new Date("2026-11-04T23:00:00Z"),
     soon: "WoW: Forever launches",
     arrived: "WoW: Forever is live",
+    channelCountdown: "⏳forever-in",
   },
   {
     key: "raids",

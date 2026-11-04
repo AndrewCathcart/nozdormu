@@ -6,6 +6,7 @@ export {
   bluePostFeeds,
   bluePosts,
   calendarReminders,
+  channelCountdowns,
   classSpells,
   dungeonBosses,
   dungeonLoot,

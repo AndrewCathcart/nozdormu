@@ -7,7 +7,7 @@ import { writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { SeenPostStore } from "@nozdormu/blueposts";
-import type { PostedReminderStore } from "@nozdormu/calendar";
+import type { ChannelCountdownStore, PostedReminderStore } from "@nozdormu/calendar";
 import { type ChannelMessage, createLogger } from "@nozdormu/core";
 import type { DungeonStore } from "@nozdormu/dungeons";
 import type { GameDataStore } from "@nozdormu/gamedata";
@@ -112,6 +112,27 @@ function readOnlyPostedReminders(store: PostedReminderStore): PostedReminderStor
   };
 }
 
+function readOnlyChannelCountdowns(store: ChannelCountdownStore): ChannelCountdownStore {
+  return {
+    countdownOf: store.countdownOf,
+    start: (channelId) => {
+      logger.info(
+        { event: "dry_run.countdown_start", channelId },
+        "Would store the channel's usual name",
+      );
+      return Promise.resolve();
+    },
+    markShown: (channelId) => {
+      logger.info({ event: "dry_run.countdown_shown", channelId }, "Would record the new name");
+      return Promise.resolve();
+    },
+    finish: (channelId) => {
+      logger.info({ event: "dry_run.countdown_finish", channelId }, "Would forget the countdown");
+      return Promise.resolve();
+    },
+  };
+}
+
 function dryRun(deps: FeatureDeps): FeatureDeps {
   return {
     ...deps,
@@ -120,6 +141,14 @@ function dryRun(deps: FeatureDeps): FeatureDeps {
     seenStaffPosts: readOnlySeenStaffPosts(deps.seenStaffPosts),
     dungeonStore: readOnlyDungeons(deps.dungeonStore),
     postedReminders: readOnlyPostedReminders(deps.postedReminders),
+    channelCountdowns: readOnlyChannelCountdowns(deps.channelCountdowns),
+    channelNames: {
+      nameOf: deps.channelNames.nameOf,
+      rename: (channelId, name) => {
+        console.log(`\nDRY RUN: would rename channel ${channelId} to ${name}\n`);
+        return Promise.resolve();
+      },
+    },
     publish: (channelId, message, files = []) => {
       console.log(`\nDRY RUN: would post in channel ${channelId}:\n${asText(message)}\n`);
       for (const { name, data } of files) {
