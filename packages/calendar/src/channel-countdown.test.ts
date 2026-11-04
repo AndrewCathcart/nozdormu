@@ -83,18 +83,18 @@ function newNames(deps: ReturnType<typeof createDeps>): string[] {
 }
 
 describe("channel name countdown", () => {
-  it("renames the news channel to the time left, rounded up to 10 minutes", async () => {
+  it("renames the news channel to the time left, rounded up to 5 minutes", async () => {
     const deps = createDeps(before(launchAt, 22, 43));
 
     await countdownJob(deps).run();
 
-    expect(newNames(deps)).toEqual(["⏳made-up-in-22h-50m"]);
+    expect(newNames(deps)).toEqual(["⏳made-up-in-22h-45m"]);
   });
 
   it("renames only when the countdown moves on a step", async () => {
     const deps = createDeps(before(launchAt, 22, 43), {
       originalName: usualName,
-      shownName: "⏳made-up-in-22h-50m",
+      shownName: "⏳made-up-in-22h-45m",
     });
 
     await countdownJob(deps).run();
@@ -147,20 +147,24 @@ describe("channel name countdown", () => {
     deps.countdowns.markShown.mockRejectedValueOnce(new Error("Postgres is down"));
     const job = countdownJob(deps);
     await expect(job.run()).rejects.toThrow("Postgres is down");
-    deps.channelNames.nameOf.mockResolvedValue("⏳made-up-in-22h-50m");
+    deps.channelNames.nameOf.mockResolvedValue("⏳made-up-in-22h-45m");
     await job.run();
     deps.now.mockReturnValue(new Date(launchAt.getTime() + 30_000));
 
     await job.run();
 
-    expect(newNames(deps)).toEqual(["⏳made-up-in-22h-50m", "⏳made-up-in-22h-50m", usualName]);
+    expect(newNames(deps)).toEqual(["⏳made-up-in-22h-45m", "⏳made-up-in-22h-45m", usualName]);
   });
 
   it.each([
     [23, 0, "⏳made-up-in-23h"],
-    [22, 55, "⏳made-up-in-23h"],
+    [22, 57, "⏳made-up-in-23h"],
+    [22, 53, "⏳made-up-in-22h-55m"],
     [24, 0, "⏳made-up-in-24h"],
-    [0, 41, "⏳made-up-in-50m"],
+    [0, 41, "⏳made-up-in-45m"],
+    [0, 12, "⏳made-up-in-15m"],
+    // The last step is 10 minutes, leaving Discord's allowance for the rename back at the time.
+    [0, 7, "⏳made-up-in-10m"],
     [0, 1, "⏳made-up-in-10m"],
   ])("shows %ih %im left as %s", async (hours, minutes, name) => {
     const deps = createDeps(before(launchAt, hours, minutes));
