@@ -24,17 +24,20 @@ export interface ChannelCountdownDeps {
   readonly logger: Pick<Logger, "info">;
 }
 
-// Discord allows 2 renames per channel every 10 minutes, so the name moves in 10-minute steps.
-const stepMs = 10 * 60_000;
+// Discord allows 2 renames per channel every 10 minutes, and makes a rename past that wait. The name
+// moves in 5-minute steps, using all of that, except that the last step is 10 minutes, so the
+// rename back when the time arrives is only the second in 10 minutes and isn't held up.
+const stepMs = 5 * 60_000;
+const lastStepMs = 10 * 60_000;
 // The channel counts down for the last day.
 const countdownMs = day;
 // What the server's audit log says each rename was for.
 const auditReason = "Calendar countdown";
 
-// "22h-50m", "23h" or "50m": the time left, rounded up to the next step, so it never claims less
+// "22h-55m", "23h" or "45m": the time left, rounded up to the next step, so it never claims less
 // time than there is.
 function timeLeft(ms: number): string {
-  const minutes = (Math.ceil(ms / stepMs) * stepMs) / 60_000;
+  const minutes = Math.max(Math.ceil(ms / stepMs) * stepMs, lastStepMs) / 60_000;
   const hours = Math.floor(minutes / 60);
   const parts = [
     hours > 0 ? `${String(hours)}h` : "",
