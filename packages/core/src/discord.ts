@@ -1,6 +1,7 @@
 import {
   InteractionResponseType,
   Routes,
+  type RESTPatchAPIChannelJSONBody,
   type RESTPostAPIChannelMessageJSONBody,
   type RESTPostAPIInteractionCallbackJSONBody,
 } from "discord-api-types/v10";
@@ -146,6 +147,13 @@ export function createChannelPublisher(rest: Pick<REST, "post">): ChannelPublish
   };
 }
 
+// Reads and changes a channel's name. Discord allows 2 renames per channel every 10 minutes.
+export interface ChannelNamer {
+  readonly nameOf: (channelId: string) => Promise<string>;
+  // The reason goes in the server's audit log.
+  readonly rename: (channelId: string, name: string, reason: string) => Promise<void>;
+}
+
 // One of the bot's own messages: its text, and the links of its cards.
 export interface RecentPost {
   readonly content: string;
@@ -186,5 +194,17 @@ export function createRecentPostReader(rest: Pick<REST, "get">): RecentPostReade
         content: message.content,
         embedUrls: message.embeds.flatMap((embed) => (embed.url === undefined ? [] : [embed.url])),
       }));
+  };
+}
+
+const namedChannel = z.object({ name: z.string() });
+
+export function createChannelNamer(rest: Pick<REST, "get" | "patch">): ChannelNamer {
+  return {
+    nameOf: async (channelId) => namedChannel.parse(await rest.get(Routes.channel(channelId))).name,
+    rename: async (channelId, name, reason) => {
+      const body = { name } satisfies RESTPatchAPIChannelJSONBody;
+      await rest.patch(Routes.channel(channelId), { body, reason });
+    },
   };
 }

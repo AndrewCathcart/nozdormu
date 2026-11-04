@@ -1,7 +1,7 @@
-import { Routes } from "discord-api-types/v10";
+import { ChannelType, Routes } from "discord-api-types/v10";
 import type { REST } from "discord.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createChannelPublisher, createRecentPostReader } from "./discord.ts";
+import { createChannelNamer, createChannelPublisher, createRecentPostReader } from "./discord.ts";
 
 const botUserId = "900000000000000009";
 const channelId = "300000000000000003";
@@ -129,6 +129,34 @@ describe("createChannelPublisher", () => {
     expect(rest.post).toHaveBeenCalledExactlyOnceWith(Routes.channelMessages(channelId), {
       body: { content: "Made-up masthead" },
       files: [{ name: "this-week.jpg", data: new Uint8Array([1, 2, 3]) }],
+    });
+  });
+});
+
+describe("createChannelNamer", () => {
+  it("reads the channel's name from Discord", async () => {
+    const rest = {
+      get: vi
+        .fn<REST["get"]>()
+        .mockResolvedValue({ id: channelId, type: ChannelType.GuildText, name: "made-up-news" }),
+      patch: vi.fn<REST["patch"]>().mockResolvedValue({}),
+    } satisfies Pick<REST, "get" | "patch">;
+
+    expect(await createChannelNamer(rest).nameOf(channelId)).toBe("made-up-news");
+    expect(rest.get).toHaveBeenCalledWith(Routes.channel(channelId));
+  });
+
+  it("renames the channel, with a reason for the audit log", async () => {
+    const rest = {
+      get: vi.fn<REST["get"]>(),
+      patch: vi.fn<REST["patch"]>().mockResolvedValue({}),
+    } satisfies Pick<REST, "get" | "patch">;
+
+    await createChannelNamer(rest).rename(channelId, "⏳made-up-in-10m", "Made-up reason");
+
+    expect(rest.patch).toHaveBeenCalledWith(Routes.channel(channelId), {
+      body: { name: "⏳made-up-in-10m" },
+      reason: "Made-up reason",
     });
   });
 });

@@ -265,3 +265,12 @@ export const calendarReminders = pgTable("calendar_reminders", {
   key: text("key").primaryKey(),
   postedAt: timestamp("posted_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// A channel whose name is counting down to a calendar date: the name it had before, to give back
+// when the date arrives, and the countdown name it was last given.
+export const channelCountdowns = pgTable("channel_countdowns", {
+  channelId: text("channel_id").primaryKey(),
+  originalName: text("original_name").notNull(),
+  shownName: text("shown_name"),
+  startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+});

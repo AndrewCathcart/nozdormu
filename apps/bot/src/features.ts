@@ -7,13 +7,18 @@ import {
   type SeenPostStore,
 } from "@nozdormu/blueposts";
 import {
+  type ChannelCountdownStore,
   createCalendarFeature,
+  createChannelCountdownFeature,
+  createChannelCountdownStore,
   createPostedReminderStore,
   foreverMilestones,
   type PostedReminderStore,
 } from "@nozdormu/calendar";
 import {
+  type ChannelNamer,
   type ChannelPublisher,
+  createChannelNamer,
   createChannelPublisher,
   createRecentPostReader,
   type Feature,
@@ -85,6 +90,8 @@ export interface FeatureDeps {
   readonly seenStaffPosts: SeenPostStore;
   readonly logger: Pick<Logger, "info" | "warn" | "error">;
   readonly postedReminders: PostedReminderStore;
+  readonly channelNames: ChannelNamer;
+  readonly channelCountdowns: ChannelCountdownStore;
   readonly readSpyglass: SpyglassReader;
   readonly dungeonStore: DungeonStore;
 }
@@ -114,6 +121,8 @@ export function createFeatureDeps(
     readStaffPosts: createForumReader({ fetch, forum: euForums.address }),
     seenStaffPosts: createSeenPostStore(db),
     postedReminders: createPostedReminderStore(db),
+    channelNames: createChannelNamer(rest),
+    channelCountdowns: createChannelCountdownStore(db),
     readSpyglass: createSpyglassReader({ fetch }),
     dungeonStore: createDungeonStore(db),
   };
@@ -163,6 +172,14 @@ export function createFeatures(deps: FeatureDeps): Feature[] {
       now: deps.now,
       posted: deps.postedReminders,
       publish: deps.publish,
+      logger: deps.logger,
+    }),
+    createChannelCountdownFeature({
+      newsChannelId: deps.config.foreverNews.channelId,
+      milestones: foreverMilestones,
+      now: deps.now,
+      countdowns: deps.channelCountdowns,
+      channelNames: deps.channelNames,
       logger: deps.logger,
     }),
     createDungeonFeature({
